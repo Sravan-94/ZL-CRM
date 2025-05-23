@@ -45,6 +45,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
         { name: 'Leads', href: '/admin/leads', icon: Users },
         { name: 'Reports', href: '/admin/reports', icon: BarChart2 },
         { name: 'Calendar', href: '/admin/calendar', icon: Calendar },
+        { name: 'RegisterBda', href: '/admin/RegisterBda', icon: Users },
       ];
     } else {
       return [
