@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { mockLeads } from '../../data/mockData';
 import { Lead, LeadStatus } from '../../types';
-import { format, parseISO, isToday, isBefore } from 'date-fns';
+import { format, isToday, isBefore } from 'date-fns';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import LeadModal from '../../components/leads/LeadModal';
@@ -26,7 +26,9 @@ const BdaLeads = () => {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<LeadStatus | 'all'>('all');
   const [temperatureFilter, setTemperatureFilter] = useState<string>('all');
-  
+  // Add state for the active card filter
+  const [activeCardFilter, setActiveCardFilter] = useState<'today' | 'overdue' | 'closed' | 'all'>('all');
+
   // Handle sorting
   const handleSort = (key: keyof Lead) => {
     if (sortBy === key) {
@@ -36,7 +38,12 @@ const BdaLeads = () => {
       setSortDirection('asc');
     }
   };
-  
+
+  // Handle card filter click
+  const handleCardFilter = (filter: 'today' | 'overdue' | 'closed' | 'all') => {
+    setActiveCardFilter(filter);
+  };
+
   // Filter and sort leads
   const filteredLeads = leads
     .filter(lead => {
@@ -46,25 +53,32 @@ const BdaLeads = () => {
       
       const matchesStatus = statusFilter === 'all' || lead.status === statusFilter;
       const matchesTemperature = temperatureFilter === 'all' || lead.temperature === temperatureFilter;
-      
-      return matchesSearch && matchesStatus && matchesTemperature;
+
+      // Add card filter logic
+      let matchesCardFilter = true;
+      if (activeCardFilter === 'today') {
+        matchesCardFilter = lead.followUpDate ? isToday(new Date(lead.followUpDate)) : false;
+      } else if (activeCardFilter === 'overdue') {
+        matchesCardFilter = lead.followUpDate ? isBefore(new Date(lead.followUpDate), new Date()) && !isToday(new Date(lead.followUpDate)) : false;
+      } else if (activeCardFilter === 'closed') {
+        matchesCardFilter = lead.status === 'closed_won';
+      }
+
+      return matchesSearch && matchesStatus && matchesTemperature && matchesCardFilter;
     })
     .sort((a, b) => {
       let valueA = a[sortBy];
       let valueB = b[sortBy];
       
-      // Handle null values
       if (valueA === null) valueA = '';
       if (valueB === null) valueB = '';
       
-      // Handle date strings
       if (typeof valueA === 'string' && (sortBy === 'createdAt' || sortBy === 'updatedAt' || sortBy === 'followUpDate')) {
         return sortDirection === 'asc' 
           ? new Date(valueA).getTime() - new Date(valueB as string).getTime()
           : new Date(valueB as string).getTime() - new Date(valueA).getTime();
       }
       
-      // Handle other string comparisons
       if (typeof valueA === 'string') {
         return sortDirection === 'asc'
           ? valueA.localeCompare(valueB as string)
@@ -73,7 +87,7 @@ const BdaLeads = () => {
       
       return 0;
     });
-  
+
   // Handle opening lead modal
   const handleOpenLeadModal = (lead: Lead) => {
     setSelectedLead(lead);
@@ -191,10 +205,33 @@ const BdaLeads = () => {
         </div>
       )}
       
-      {/* Follow-up reminders */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Follow-up reminders as filters */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* All leads */}
+        <div
+          onClick={() => handleCardFilter('all')}
+          className={`border rounded-lg p-4 flex items-center justify-between cursor-pointer ${
+            activeCardFilter === 'all' ? 'bg-blue-100 border-blue-300' : 'bg-slate-50 border-slate-200'
+          }`}
+        >
+          <div className="flex items-center">
+            <div className="p-2 bg-slate-100 rounded-full mr-3">
+              <Clock className="h-5 w-5 text-slate-600" />
+            </div>
+            <div>
+              <h3 className="font-medium text-slate-800">All Leads</h3>
+              <p className="text-sm text-slate-700">{leads.length} leads</p>
+            </div>
+          </div>
+        </div>
+
         {/* Today's follow-ups */}
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-center justify-between">
+        <div
+          onClick={() => handleCardFilter('today')}
+          className={`border rounded-lg p-4 flex items-center justify-between cursor-pointer ${
+            activeCardFilter === 'today' ? 'bg-amber-100 border-amber-300' : 'bg-amber-50 border-amber-200'
+          }`}
+        >
           <div className="flex items-center">
             <div className="p-2 bg-amber-100 rounded-full mr-3">
               <Clock className="h-5 w-5 text-amber-600" />
@@ -209,7 +246,12 @@ const BdaLeads = () => {
         </div>
         
         {/* Overdue follow-ups */}
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center justify-between">
+        <div
+          onClick={() => handleCardFilter('overdue')}
+          className={`border rounded-lg p-4 flex items-center justify-between cursor-pointer ${
+            activeCardFilter === 'overdue' ? 'bg-red-100 border-red-300' : 'bg-red-50 border-red-200'
+          }`}
+        >
           <div className="flex items-center">
             <div className="p-2 bg-red-100 rounded-full mr-3">
               <Clock className="h-5 w-5 text-red-600" />
@@ -224,7 +266,12 @@ const BdaLeads = () => {
         </div>
         
         {/* Closed deals */}
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center justify-between">
+        <div
+          onClick={() => handleCardFilter('closed')}
+          className={`border rounded-lg p-4 flex items-center justify-between cursor-pointer ${
+            activeCardFilter === 'closed' ? 'bg-green-100 border-green-300' : 'bg-green-50 border-green-200'
+          }`}
+        >
           <div className="flex items-center">
             <div className="p-2 bg-green-100 rounded-full mr-3">
               <CheckCircle className="h-5 w-5 text-green-600" />
@@ -382,7 +429,6 @@ const BdaLeads = () => {
           }}
           lead={selectedLead}
           onSave={(updatedLead) => {
-            // Update lead in the list
             const updatedLeads = leads.map(lead => 
               lead.id === updatedLead.id ? updatedLead : lead
             );

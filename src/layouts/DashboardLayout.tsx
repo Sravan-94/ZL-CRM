@@ -50,7 +50,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       return [
         { name: 'Dashboard', href: '/bda/dashboard', icon: LayoutDashboard },
         { name: 'Leads', href: '/bda/leads', icon: Users },
-        { name: 'Calendar', href: '/bda/calendar', icon: Calendar },
+        // { name: 'Calendar', href: '/bda/calendar', icon: Calendar },
       ];
     }
   };
