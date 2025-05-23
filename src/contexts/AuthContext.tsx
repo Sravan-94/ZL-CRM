@@ -1,21 +1,21 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, UserRole } from '../types';
-import { mockUsers } from '../data/mockData';
+import { User } from '../types'; // Ensure you define User and UserRole properly
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (user: User) => void;
   logout: () => void;
   isAuthenticated: boolean;
   isAdmin: boolean;
   isBDA: boolean;
+  setUser: (user: User | null) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
@@ -27,40 +27,17 @@ interface AuthProviderProps {
 
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check for saved user in localStorage on initial load
-    const savedUser = localStorage.getItem('crmUser');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
+    const storedUser = localStorage.getItem('crmUser');
+    if (storedUser) {
+      setUser(JSON.parse(storedUser));
     }
-    setIsLoading(false);
   }, []);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
-    // For demo purposes, we're using mock data
-    // In a real app, this would be an API call
-    try {
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      // Find user with matching email (case insensitive)
-      const foundUser = mockUsers.find(u => 
-        u.email.toLowerCase() === email.toLowerCase());
-      
-      // In real app, you would check password here
-      // For demo, we'll just check if the user exists
-      if (foundUser) {
-        setUser(foundUser);
-        localStorage.setItem('crmUser', JSON.stringify(foundUser));
-        return true;
-      }
-      return false;
-    } catch (error) {
-      console.error('Login error:', error);
-      return false;
-    }
+  const login = (userData: User) => {
+    setUser(userData);
+    localStorage.setItem('crmUser', JSON.stringify(userData));
   };
 
   const logout = () => {
@@ -69,12 +46,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const isAuthenticated = !!user;
-  const isAdmin = user?.role === 'admin';
-  const isBDA = user?.role === 'bda';
-
-  if (isLoading) {
-    return null; // Or a loading spinner
-  }
+  const isAdmin = user?.role === 'admin' || user?.role === 'ADMIN';
+  const isBDA = user?.role === 'bda' || user?.role === 'BDA';
 
   return (
     <AuthContext.Provider
@@ -85,6 +58,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         isAuthenticated,
         isAdmin,
         isBDA,
+        setUser,
       }}
     >
       {children}
