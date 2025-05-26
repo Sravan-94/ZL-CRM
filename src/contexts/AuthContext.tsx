@@ -1,22 +1,28 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, UserRole } from '../types';
-import { mockUsers } from '../data/mockData';
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+} from "react";
+import { User } from "../types"; // Ensure this interface defines at least: id, name, role, etc.
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (user: User) => void;
   logout: () => void;
   isAuthenticated: boolean;
   isAdmin: boolean;
   isBDA: boolean;
+  setUser: (user: User | null) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+  if (!context) {
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 };
@@ -27,53 +33,33 @@ interface AuthProviderProps {
 
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // ✅ loading state
 
   useEffect(() => {
-    // Check for saved user in localStorage on initial load
-    const savedUser = localStorage.getItem('crmUser');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
+    const storedUser = localStorage.getItem("crmUser");
+    if (storedUser) {
+      setUser(JSON.parse(storedUser));
     }
-    setIsLoading(false);
+    setLoading(false); // ✅ done loading from localStorage
   }, []);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
-    // For demo purposes, we're using mock data
-    // In a real app, this would be an API call
-    try {
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      // Find user with matching email (case insensitive)
-      const foundUser = mockUsers.find(u => 
-        u.email.toLowerCase() === email.toLowerCase());
-      
-      // In real app, you would check password here
-      // For demo, we'll just check if the user exists
-      if (foundUser) {
-        setUser(foundUser);
-        localStorage.setItem('crmUser', JSON.stringify(foundUser));
-        return true;
-      }
-      return false;
-    } catch (error) {
-      console.error('Login error:', error);
-      return false;
-    }
+  const login = (userData: User) => {
+    setUser(userData);
+    localStorage.setItem("crmUser", JSON.stringify(userData));
   };
 
   const logout = () => {
     setUser(null);
-    localStorage.removeItem('crmUser');
+    localStorage.removeItem("crmUser");
   };
 
   const isAuthenticated = !!user;
-  const isAdmin = user?.role === 'admin';
-  const isBDA = user?.role === 'bda';
+  const isAdmin = user?.role?.toLowerCase() === "admin";
+  const isBDA = user?.role?.toLowerCase() === "bda";
 
-  if (isLoading) {
-    return null; // Or a loading spinner
+  if (loading) {
+    // ✅ You can use a loading spinner here instead
+    return <div>Loading...</div>;
   }
 
   return (
@@ -85,6 +71,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         isAuthenticated,
         isAdmin,
         isBDA,
+        setUser,
       }}
     >
       {children}
