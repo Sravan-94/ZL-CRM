@@ -3,7 +3,6 @@ import React, { useState } from 'react';
 const RegisterBDA: React.FC = () => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [message, setMessage] = useState('');
@@ -18,21 +17,13 @@ const RegisterBDA: React.FC = () => {
       return;
     }
 
-    const token = localStorage.getItem('jwtToken');
-    if (!token) {
-      setMessage('Unauthorized: Admin token missing');
-      setMessageColor('red');
-      return;
-    }
-
     try {
-      const res = await fetch('/api/admin/register-bda', {
+      const res = await fetch('http://localhost:8080/api/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({ name, email, phone, password })
+        body: JSON.stringify({ name, email, password })
       });
 
       const text = await res.text();
@@ -41,7 +32,6 @@ const RegisterBDA: React.FC = () => {
         setMessageColor('green');
         setName('');
         setEmail('');
-        setPhone('');
         setPassword('');
         setConfirmPassword('');
       } else {
@@ -75,14 +65,6 @@ const RegisterBDA: React.FC = () => {
           className="w-full px-4 py-2 border rounded"
         />
         <input
-          type="text"
-          placeholder="Phone Number"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          required
-          className="w-full px-4 py-2 border rounded"
-        />
-        <input
           type="password"
           placeholder="Password"
           value={password}
@@ -107,7 +89,11 @@ const RegisterBDA: React.FC = () => {
         >
           Submit
         </button>
-        {message && <div className={`text-${messageColor}-600 mt-2`}>{message}</div>}
+        {message && (
+          <div className={`text-${messageColor}-600 mt-2 text-center`}>
+            {message}
+          </div>
+        )}
       </form>
     </div>
   );
