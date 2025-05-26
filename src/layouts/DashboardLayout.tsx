@@ -77,7 +77,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
         <div className="flex items-center justify-between h-16 px-6 border-b border-slate-200">
           <div className="flex items-center">
             <Building2 className="h-6 w-6 text-blue-600 mr-2" />
-            <span className="font-semibold text-lg">InCRM</span>
+            <span className="font-semibold text-lg">ZL CRM</span>
           </div>
           <button 
             className="lg:hidden text-slate-500 hover:text-slate-700"

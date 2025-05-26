@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { mockLeads } from '../../data/mockData';
 import { Lead, LeadStatus } from '../../types';
-import { format, isToday, isBefore } from 'date-fns';
+import { format, parseISO, isToday, isBefore } from 'date-fns';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import LeadModal from '../../components/leads/LeadModal';
