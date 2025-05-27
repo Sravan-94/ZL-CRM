@@ -134,10 +134,15 @@ const LeadModal = ({ isOpen, onClose, lead, onSave, readOnly = false }: LeadModa
                       className="block w-full rounded-md border-slate-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50 text-sm disabled:bg-slate-50 disabled:text-slate-500 disabled:border-slate-200"
                     >
                       <option value="new">New</option>
-                      <option value="contacted">Contacted</option>
                       <option value="qualified">Qualified</option>
                       <option value="proposal">Proposal</option>
                       <option value="negotiation">Negotiation</option>
+                      <option value="contacted">WrongNumber</option>
+                      <option value="warm">NotAnswered</option>
+                      <option value="warm">CallBackLater</option>
+                      <option value="warm">Interested</option>
+                      <option value="warm">NotInterested</option>
+                      <option value="warm">SwitchedOff</option>
                       <option value="closed_won">Closed (Won)</option>
                       <option value="closed_lost">Closed (Lost)</option>
                     </select>

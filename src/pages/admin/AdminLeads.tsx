@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef } from 'react';
 import { 
   ArrowUpDown, 
@@ -23,15 +24,18 @@ interface Lead {
   phone: string;
   email: string;
   industry: string;
-  service: string;
-  type: string;
+  companyName: string;
+  city: string;
+  state: string;
   status: LeadStatus;
   assignedBdaId: string | null;
   assignedBdaName: string | null;
   followUpDate: string | null;
   temperature: string;
-  interests: string[];
+  interests: string;
   remarks: string;
+  actionStatus: string;
+  actionTaken: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -75,10 +79,8 @@ const AdminLeads = () => {
         if (!leadsResponse.ok) throw new Error(`Failed to fetch leads: ${leadsResponse.status}`);
         const rawLeadsData = await leadsResponse.json();
 
-        // Log raw response for debugging
         console.log('Raw Leads API Response:', rawLeadsData);
 
-        // Map API response to Lead interface
         const leadsData: Lead[] = Array.isArray(rawLeadsData)
           ? rawLeadsData.map((lead: any) => ({
               id: String(lead.id),
@@ -86,15 +88,18 @@ const AdminLeads = () => {
               phone: lead.contactNo || '',
               email: lead.email || '',
               industry: lead.industry || '',
-              service: lead.service || '',
-              type: lead.type || '',
+              companyName: lead.companyName || '',
+              city: lead.city || '',
+              state: lead.state || '',
               status: (lead.status || 'new') as LeadStatus,
               assignedBdaId: lead.assignedBdaId ? String(lead.assignedBdaId) : null,
               assignedBdaName: lead.assignedTo || null,
               followUpDate: lead.followUp || null,
               temperature: lead.temperature || '',
-              interests: Array.isArray(lead.interests) ? lead.interests : [],
+              interests: lead.intrests || '',
               remarks: lead.remarks || '',
+              actionStatus: lead.actionStatus || '',
+              actionTaken: lead.actionTaken || '',
               createdAt: lead.createdAt || new Date().toISOString(),
               updatedAt: lead.lastUpdated || new Date().toISOString(),
             }))
@@ -112,10 +117,8 @@ const AdminLeads = () => {
         }
         const usersData = await usersResponse.json();
 
-        // Log the raw response for debugging
         console.log('Raw BDA API Response:', usersData);
 
-        // Map API response to User interface, converting id to string
         const bdaUsers = Array.isArray(usersData)
           ? usersData
               .filter((user: any) => user.role === 'BDA')
@@ -203,9 +206,6 @@ const AdminLeads = () => {
       let valueA = a[sortBy] ?? '';
       let valueB = b[sortBy] ?? '';
 
-      if (Array.isArray(valueA)) valueA = valueA.join(',');
-      if (Array.isArray(valueB)) valueB = valueB.join(',');
-
       if (sortBy === 'createdAt' || sortBy === 'updatedAt' || sortBy === 'followUpDate') {
         const dateA = isValidDate(valueA as string) ? new Date(valueA as string).getTime() : 0;
         const dateB = isValidDate(valueB as string) ? new Date(valueB as string).getTime() : 0;
@@ -242,8 +242,8 @@ const AdminLeads = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          leadIds: Array.from(selectedLeads),
-          bdaId: selectedBda.id,
+          leadIds: Array.from(selectedLeads).map(id => parseInt(id)), // Convert to integers
+          bdaId: parseInt(selectedBda.id), // Convert to integer
           bdaName: selectedBda.name,
         }),
       });
@@ -292,33 +292,39 @@ const AdminLeads = () => {
 
       if (!response.ok) throw new Error('Failed to upload CSV');
 
-      const rawNewLeads = await response.json();
-      if (!Array.isArray(rawNewLeads) || !rawNewLeads.every(lead => 'id' in lead && 'name' in lead)) {
-        throw new Error('Invalid lead data received');
-      }
+      const message = await response.text();
+      toast.success(message);
 
-      // Map imported leads to Lead interface
-      const newLeads: Lead[] = rawNewLeads.map((lead: any) => ({
-        id: String(lead.id),
-        name: lead.name || '',
-        phone: lead.contactNo || '',
-        email: lead.email || '',
-        industry: lead.industry || '',
-        service: lead.service || '',
-        type: lead.type || '',
-        status: (lead.status || 'new') as LeadStatus,
-        assignedBdaId: lead.assignedBdaId ? String(lead.assignedBdaId) : null,
-        assignedBdaName: lead.assignedTo || null,
-        followUpDate: lead.followUp || null,
-        temperature: lead.temperature || '',
-        interests: Array.isArray(lead.interests) ? lead.interests : [],
-        remarks: lead.remarks || '',
-        createdAt: lead.createdAt || new Date().toISOString(),
-        updatedAt: lead.lastUpdated || new Date().toISOString(),
-      }));
+      // Re-fetch leads to ensure state is updated
+      const leadsResponse = await fetch('http://localhost:8080/api/leads/getall');
+      if (!leadsResponse.ok) throw new Error('Failed to fetch updated leads');
+      const rawLeadsData = await leadsResponse.json();
 
-      setLeads(prev => [...prev, ...newLeads]);
-      toast.success('Leads imported successfully');
+      const newLeads: Lead[] = Array.isArray(rawLeadsData)
+        ? rawLeadsData.map((lead: any) => ({
+            id: String(lead.id),
+            name: lead.name || '',
+            phone: lead.contactNo || '',
+            email: lead.email || '',
+            industry: lead.industry || '',
+            companyName: lead.companyName || '',
+            city: lead.city || '',
+            state: lead.state || '',
+            status: (lead.status || 'new') as LeadStatus,
+            assignedBdaId: lead.assignedBdaId ? String(lead.assignedBdaId) : null,
+            assignedBdaName: lead.assignedTo || null,
+            followUpDate: lead.followUp || null,
+            temperature: lead.temperature || '',
+            interests: lead.intrests || '',
+            remarks: lead.remarks || '',
+            actionStatus: lead.actionStatus || '',
+            actionTaken: lead.actionTaken || '',
+            createdAt: lead.createdAt || new Date().toISOString(),
+            updatedAt: lead.lastUpdated || new Date().toISOString(),
+          }))
+        : [];
+
+      setLeads(newLeads);
     } catch (err) {
       console.error('Error importing CSV:', err);
       toast.error('Failed to upload CSV');
@@ -331,20 +337,22 @@ const AdminLeads = () => {
   // Export leads to CSV
   const handleExportCSV = () => {
     const exportData = filteredLeads.map(lead => ({
-      'Lead Name': lead.name,
-      'Phone': lead.phone,
-      'Email': lead.email,
-      'Industry': lead.industry,
-      'Service': lead.service,
-      'Type': lead.type,
-      'Status': lead.status,
-      'Assigned BDA': lead.assignedBdaName || 'Unassigned',
-      'Follow-up Date': lead.followUpDate || '',
-      'Temperature': lead.temperature,
-      'Interests': lead.interests.join(', '),
-      'Remarks': lead.remarks,
-      'Created At': lead.createdAt,
-      'Updated At': lead.updatedAt,
+      Id: lead.id,
+      Name: lead.name,
+      ContactNo: lead.phone,
+      Email: lead.email,
+      Status: lead.status,
+      ActionStatus: lead.actionStatus,
+      AssignedTo: lead.assignedBdaName || 'Unassigned',
+      Intrests: lead.interests,
+      Remarks: lead.remarks,
+      ActionTaken: lead.actionTaken,
+      CompanyName: lead.companyName,
+      Industry: lead.industry,
+      City: lead.city,
+      State: lead.state,
+      FollowUp: lead.followUpDate || '',
+      LastUpdated: lead.updatedAt,
     }));
 
     const csv = Papa.unparse(exportData, { quotes: true });
@@ -742,48 +750,53 @@ const AdminLeads = () => {
       
       {/* Lead Modal */}
       {selectedLead && (
-  <LeadModal
-    isOpen={isModalOpen}
-    onClose={() => {
-      setIsModalOpen(false);
-      setSelectedLead(null);
-    }}
-    lead={selectedLead}
-    onSave={async (updatedLead) => {
-      try {
-        const response = await fetch(`http://localhost:8080/api/leads/update/${updatedLead.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: updatedLead.id,
-            name: updatedLead.name ?? null,
-            email: updatedLead.email ?? null,
-            contactNo: updatedLead.phone ?? null,
-            status: updatedLead.status ?? null,
-            assignedTo: updatedLead.assignedBdaName ?? null,
-            followUp: updatedLead.followUpDate ?? null,
-          }),
-        });
+        <LeadModal
+          isOpen={isModalOpen}
+          onClose={() => {
+            setIsModalOpen(false);
+            setSelectedLead(null);
+          }}
+          lead={selectedLead}
+          onSave={async (updatedLead) => {
+            try {
+              const response = await fetch(`http://localhost:8080/api/leads/update/${updatedLead.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  name: updatedLead.name || null,
+                  email: updatedLead.email || null,
+                  contactNo: updatedLead.phone || null,
+                  status: updatedLead.status || null,
+                  assignedTo: updatedLead.assignedBdaName || null,
+                  followUp: updatedLead.followUpDate || null,
+                  intrests: updatedLead.interests || null,
+                  remarks: updatedLead.remarks || null,
+                  actionStatus: updatedLead.actionStatus || null,
+                  actionTaken: updatedLead.actionTaken || null,
+                  companyName: updatedLead.companyName || null,
+                  industry: updatedLead.industry || null,
+                  city: updatedLead.city || null,
+                  state: updatedLead.state || null,
+                }),
+              });
 
-        if (!response.ok) throw new Error('Failed to update lead');
+              if (!response.ok) throw new Error('Failed to update lead');
 
-        // Replace updated lead in local state
-        setLeads(prev =>
-          prev.map(lead => (lead.id === updatedLead.id ? { ...lead, ...updatedLead } : lead))
-        );
+              setLeads(prev =>
+                prev.map(lead => (lead.id === updatedLead.id ? { ...lead, ...updatedLead } : lead))
+              );
 
-        setIsModalOpen(false);
-        setSelectedLead(null);
-        toast.success('Lead updated successfully');
-      } catch (err) {
-        console.error('Error updating lead:', err);
-        toast.error('Failed to update lead');
-      }
-    }}
-    readOnly={false}
-  />
-)}
-
+              setIsModalOpen(false);
+              setSelectedLead(null);
+              toast.success('Lead updated successfully');
+            } catch (err) {
+              console.error('Error updating lead:', err);
+              toast.error('Failed to update lead');
+            }
+          }}
+          readOnly={false}
+        />
+      )}
     </div>
   );
 };
