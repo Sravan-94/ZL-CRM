@@ -373,9 +373,9 @@
 
 import { useState, useEffect } from 'react';
 import { Calendar, Clock, CheckCircle2, Circle, Info } from 'lucide-react';
-import { generateCalendarEvents } from '../../data/mockData'; // Removed mockLeads since we use API
 import { useAuth } from '../../contexts/AuthContext';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isToday, isBefore, startOfDay,  endOfDay } from 'date-fns';
+// import { utcToZonedTime, zonedTimeToUtc } from 'date-fns-tz';
 
 // Lead type based on provided data structure
 interface Lead {
@@ -393,16 +393,53 @@ interface Lead {
   actionTaken: string | null;
 }
 
+// Calendar event type
+interface CalendarEvent {
+  id: number;
+  title: string;
+  date: Date;
+  status: 'today' | 'overdue' | 'upcoming';
+}
+
+// Function to generate calendar events from leads
+const generateCalendarEvents = (leads: Lead[]): CalendarEvent[] => {
+  const timeZone = 'Asia/Kolkata';
+  const today = startOfDay(utcToZonedTime(new Date(), timeZone));
+
+  return leads
+    .filter((lead) => lead.followUp)
+    .map((lead) => {
+      const followUpDate = parseISO(lead.followUp!);
+      const zonedFollowUpDate = utcToZonedTime(followUpDate, timeZone);
+      let status: 'today' | 'overdue' | 'upcoming';
+
+      if (isToday(zonedFollowUpDate)) {
+        status = 'today';
+      } else if (isBefore(zonedFollowUpDate, today)) {
+        status = 'overdue';
+      } else {
+        status = 'upcoming';
+      }
+
+      return {
+        id: lead.id,
+        title: `Follow-up with ${lead.name || 'Unknown Lead'}`,
+        date: followUpDate,
+        status,
+      };
+    });
+};
+
 const BdaDashboard = () => {
   const { user } = useAuth();
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [calendarEvents, setCalendarEvents] = useState(generateCalendarEvents(user?.id));
-  const [error, setError] = useState<string | null>(null); // Added for error handling
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   // Fetch leads from API and filter based on user
   useEffect(() => {
     if (user) {
-      console.log('Logged-in user:', { id: user.id, name: user.name }); // Debug user object
+      console.log('Logged-in user:', { id: user.id, name: user.name });
       fetch('http://localhost:8080/api/leads/getall')
         .then((response) => {
           if (!response.ok) {
@@ -417,18 +454,19 @@ const BdaDashboard = () => {
             const userId = user.id?.toString().trim().toLowerCase();
             const userName = user.name?.trim().toLowerCase();
             const match = assignedTo === userId || assignedTo === userName;
-            console.log(`Lead ID ${lead.id}: assignedTo=${assignedTo}, match=${match}`); // Debug each lead
+            console.log(`Lead ID ${lead.id}: assignedTo=${assignedTo}, match=${match}`);
             return match;
           });
-          console.log('Filtered leads:', bdaLeads); // Debug filtered leads
+          console.log('Filtered leads:', bdaLeads);
           setLeads(bdaLeads);
-          setCalendarEvents(generateCalendarEvents(user?.id, bdaLeads));
+          setCalendarEvents(generateCalendarEvents(bdaLeads));
           setError(null);
         })
         .catch((error) => {
           console.error('Error fetching leads:', error);
           setError('Failed to fetch leads. Please try again later.');
-          setLeads([]); // Clear leads on error
+          setLeads([]);
+          setCalendarEvents([]);
         });
     }
   }, [user]);
@@ -436,19 +474,20 @@ const BdaDashboard = () => {
   // Calculate metrics based on actual leads data
   const calculateMetrics = () => {
     const totalLeads = leads.length;
-    const newLeads = leads.filter((lead) => lead.status === 'new').length;
+    const newLeads = leads.filter((lead) => lead.status.toLowerCase() === 'new').length;
     const todayFollowUps = calendarEvents.filter((event) => event.status === 'today').length;
     const overdueFollowUps = calendarEvents.filter((event) => event.status === 'overdue').length;
 
     const statusCounts = leads.reduce((acc, lead) => {
-      acc[lead.status] = (acc[lead.status] || 0) + 1;
+      const status = lead.status.toLowerCase();
+      acc[status] = (acc[status] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
 
-    const whatsappSent = leads.filter((lead) => lead.actionTaken?.includes('whatsapp')).length;
-    const emailSent = leads.filter((lead) => lead.actionTaken?.includes('email')).length;
-    const quotationSent = leads.filter((lead) => lead.actionTaken?.includes('quotation')).length;
-    const sampleWorkSent = leads.filter((lead) => lead.actionTaken?.includes('sample')).length;
+    const whatsappSent = leads.filter((lead) => lead.actionTaken?.toLowerCase().includes('whatsapp')).length;
+    const emailSent = leads.filter((lead) => lead.actionTaken?.toLowerCase().includes('email')).length;
+    const quotationSent = leads.filter((lead) => lead.actionTaken?.toLowerCase().includes('quotation')).length;
+    const sampleWorkSent = leads.filter((lead) => lead.actionTaken?.toLowerCase().includes('sample')).length;
 
     return {
       totalLeads,
@@ -521,10 +560,11 @@ const BdaDashboard = () => {
   };
 
   const determineLastAction = (lead: Lead) => {
-    if (lead.actionTaken?.includes('quotation')) return 'Sent quotation';
-    if (lead.actionTaken?.includes('sample')) return 'Sent sample work';
-    if (lead.actionTaken?.includes('email')) return 'Sent email';
-    if (lead.actionTaken?.includes('whatsapp')) return 'Sent WhatsApp message';
+    const action = lead.actionTaken?.toLowerCase();
+    if (action?.includes('quotation')) return 'Sent quotation';
+    if (action?.includes('sample')) return 'Sent sample work';
+    if (action?.includes('email')) return 'Sent email';
+    if (action?.includes('whatsapp')) return 'Sent WhatsApp message';
     return lead.actionTaken || 'Updated lead status';
   };
 
@@ -543,7 +583,7 @@ const BdaDashboard = () => {
       <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-6">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-800">Welcome back, {user?.name}</h1>
+            <h1 className="text-2xl font-semibold text-slate-800">Welcome back, {user?.name || 'User'}</h1>
             <p className="text-slate-500 mt-1">Here's what's happening with your leads today.</p>
           </div>
           <div className="mt-4 md:mt-0 flex items-center">
@@ -581,56 +621,60 @@ const BdaDashboard = () => {
             <h2 className="font-medium text-slate-800">Lead Status Overview</h2>
           </div>
           <div className="p-6 space-y-4">
-            {Object.entries(statusPercentages).map(([status, percentage]) => {
-              const getStatusColor = (status: string) => {
-                switch (status) {
-                  case 'new':
-                    return 'bg-slate-500';
-                  case 'contacted':
-                    return 'bg-blue-500';
-                  case 'qualified':
-                    return 'bg-purple-500';
-                  case 'proposal':
-                    return 'bg-amber-500';
-                  case 'negotiation':
-                    return 'bg-orange-500';
-                  case 'closed_won':
-                    return 'bg-green-500';
-                  case 'closed_lost':
-                    return 'bg-red-500';
-                  case 'warm':
-                    return 'bg-yellow-500';
-                  default:
-                    return 'bg-slate-300';
-                }
-              };
+            {Object.entries(statusPercentages).length === 0 ? (
+              <p className="text-sm text-slate-500">No leads available</p>
+            ) : (
+              Object.entries(statusPercentages).map(([status, percentage]) => {
+                const getStatusColor = (status: string) => {
+                  switch (status.toLowerCase()) {
+                    case 'new':
+                      return 'bg-slate-500';
+                    case 'contacted':
+                      return 'bg-blue-500';
+                    case 'qualified':
+                      return 'bg-purple-500';
+                    case 'proposal':
+                      return 'bg-amber-500';
+                    case 'negotiation':
+                      return 'bg-orange-500';
+                    case 'closed_won':
+                      return 'bg-green-500';
+                    case 'closed_lost':
+                      return 'bg-red-500';
+                    case 'warm':
+                      return 'bg-yellow-500';
+                    default:
+                      return 'bg-slate-300';
+                  }
+                };
 
-              const getStatusLabel = (status: string) => {
-                switch (status) {
-                  case 'closed_won':
-                    return 'Won';
-                  case 'closed_lost':
-                    return 'Lost';
-                  default:
-                    return status.charAt(0).toUpperCase() + status.slice(1);
-                }
-              };
+                const getStatusLabel = (status: string) => {
+                  switch (status.toLowerCase()) {
+                    case 'closed_won':
+                      return 'Won';
+                    case 'closed_lost':
+                      return 'Lost';
+                    default:
+                      return status.charAt(0).toUpperCase() + status.slice(1);
+                  }
+                };
 
-              return (
-                <div key={status} className="space-y-1">
-                  <div className="flex justify-between items-center">
-                    <div className="text-sm font-medium text-slate-800">{getStatusLabel(status)}</div>
-                    <div className="text-sm text-slate-500">{percentage}%</div>
+                return (
+                  <div key={status} className="space-y-1">
+                    <div className="flex justify-between items-center">
+                      <div className="text-sm font-medium text-slate-800">{getStatusLabel(status)}</div>
+                      <div className="text-sm text-slate-500">{percentage}%</div>
+                    </div>
+                    <div className="w-full h-2 bg-slate-100 rounded-full">
+                      <div
+                        className={`h-full rounded-full ${getStatusColor(status)}`}
+                        style={{ width: `${percentage}%` }}
+                      ></div>
+                    </div>
                   </div>
-                  <div className="w-full h-2 bg-slate-100 rounded-full">
-                    <div
-                      className={`h-full rounded-full ${getStatusColor(status)}`}
-                      style={{ width: `${percentage}%` }}
-                    ></div>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
 
             <hr className="border-slate-200" />
 
@@ -689,7 +733,9 @@ const BdaDashboard = () => {
                       <div className="text-sm font-medium text-slate-800">{event.title}</div>
                       <div className="text-xs text-amber-600 font-medium">Due today</div>
                     </div>
-                    <div className="text-sm text-slate-500">{format(event.date, 'h:mm a')}</div>
+                    <div className="text-sm text-slate-500">
+                      {format(utcToZonedTime(event.date, 'Asia/Kolkata'), 'h:mm a')}
+                    </div>
                   </div>
                 </div>
               ))
@@ -719,26 +765,24 @@ const BdaDashboard = () => {
               </thead>
               <tbody>
                 {recentActivities.map((activity, index) => {
-                  // Find the corresponding lead to get full details
                   const lead = leads.find((l) => l.name === activity.leadName);
-                  if (!lead) return null; // Skip if lead not found
+                  if (!lead) return null;
 
-                  // Format contact number by removing the "+" if present
                   const contactNo = lead.contactNo?.startsWith('+')
                     ? lead.contactNo.slice(1)
                     : lead.contactNo;
 
-                  // Format the last updated timestamp
-                  const lastUpdated = format(parseISO(lead.lastUpdated), 'MMM d, h:mm a', { timeZone: 'Asia/Kolkata' });
+                  const lastUpdated = format(
+                    utcToZonedTime(parseISO(lead.lastUpdated), 'Asia/Kolkata'),
+                    'MMM d, h:mm a'
+                  );
 
-                  // Capitalize status and handle special cases
                   const getStatusLabel = (status: string) => {
-                    if (status === 'closed_won') return 'Won';
-                    if (status === 'closed_lost') return 'Lost';
+                    if (status.toLowerCase() === 'closed_won') return 'Won';
+                    if (status.toLowerCase() === 'closed_lost') return 'Lost';
                     return status.charAt(0).toUpperCase() + status.slice(1);
                   };
 
-                  // Determine status color
                   const getStatusColor = (status: string) => {
                     switch (status.toLowerCase()) {
                       case 'contacted':
@@ -767,7 +811,11 @@ const BdaDashboard = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4">{lead.assignedTo || '-'}</td>
-                      <td className="px-6 py-4">{lead.followUp || 'Not scheduled'}</td>
+                      <td className="px-6 py-4">
+                        {lead.followUp
+                          ? format(utcToZonedTime(parseISO(lead.followUp), 'Asia/Kolkata'), 'MMM d, h:mm a')
+                          : 'Not scheduled'}
+                      </td>
                       <td className="px-6 py-4">{lastUpdated}</td>
                     </tr>
                   );

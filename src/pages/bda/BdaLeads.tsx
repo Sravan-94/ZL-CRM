@@ -1005,13 +1005,17 @@ const LeadModal = ({
               className="mt-1 block w-full rounded-md border-slate-300 shadow-sm"
             >
               <option value="new">New</option>
-              <option value="contacted">Contacted</option>
               <option value="qualified">Qualified</option>
               <option value="proposal">Proposal</option>
               <option value="negotiation">Negotiation</option>
+              <option value="contacted">WrongNumber</option>
+              <option value="warm">NotAnswered</option>
+              <option value="warm">CallBackLater</option>
+              <option value="warm">Interested</option>
+              <option value="warm">NotInterested</option>
+              <option value="warm">SwitchedOff</option>
               <option value="closed_won">Closed (Won)</option>
               <option value="closed_lost">Closed (Lost)</option>
-              <option value="warm">Warm</option>
             </select>
           </div>
 
@@ -1029,6 +1033,7 @@ const LeadModal = ({
               <option value="hot">Hot</option>
               <option value="warm">Warm</option>
               <option value="cold">Cold</option>
+              <option value="hot">Dead</option>
             </select>
           </div>
 
@@ -1066,7 +1071,7 @@ const LeadModal = ({
           <div className="mb-4">
             <label className="block text-sm font-medium text-slate-700 mb-2">Interests</label>
             <div className="space-y-2">
-              {['Website', 'App', 'CRM', 'Both'].map((item) => (
+              {['Website', 'App', 'CRM', 'Both', 'Ecommerce', 'CustomSoftware', 'AIIntegration'].map((item) => (
                 <label className="flex items-center" key={item}>
                   <input
                     type="checkbox"
@@ -1098,6 +1103,10 @@ const LeadModal = ({
                 { name: 'emailSent', label: 'Email Sent' },
                 { name: 'quotationSent', label: 'Quotation Sent' },
                 { name: 'sampleWorkSent', label: 'Sample Work Sent' },
+                { name: 'MeetingBooked', label: 'MeetingBooked' },
+                { name: 'DemoScheduled', label: 'DemoScheduled' },
+                { name: 'NeedMoreInfo', label: 'NeedMoreInfo' },
+                { name: 'WaitingForDecision', label: 'WaitingForDecision' },
               ].map((action) => (
                 <label className="flex items-center" key={action.name}>
                   <input
