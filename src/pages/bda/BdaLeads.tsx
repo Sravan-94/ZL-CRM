@@ -676,38 +676,46 @@ const BdaDashboard = () => {
             try {
               const response = await fetch(`http://localhost:8080/api/leads/update/${updatedLead.id}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json'
+                },
                 body: JSON.stringify({
-                  name: updatedLead.name || null,
-                  email: updatedLead.email || null,
-                  contactNo: updatedLead.phone || null,
-                  status: updatedLead.status || null,
-                  assignedTo: updatedLead.assignedBdaName || null,
-                  followUp: updatedLead.followUpDate || null,
-                  intrests: updatedLead.interests || null,
-                  remarks: updatedLead.remarks || null,
-                  actionStatus: updatedLead.actionStatus || null,
-                  actionTaken: updatedLead.actionTaken || null,
-                  companyName: updatedLead.companyName || null,
-                  industry: updatedLead.industry || null,
-                  city: updatedLead.city || null,
-                  state: updatedLead.state || null,
+                  name: updatedLead.name,
+                  email: updatedLead.email,
+                  contactNo: updatedLead.phone,
+                  status: updatedLead.status,
+                  assignedTo: updatedLead.assignedBdaName,
+                  followUp: updatedLead.followUpDate,
+                  intrests: updatedLead.interests,
+                  remarks: updatedLead.remarks,
+                  actionStatus: updatedLead.actionStatus,
+                  actionTaken: updatedLead.actionTaken,
+                  companyName: updatedLead.companyName,
+                  industry: updatedLead.industry,
+                  city: updatedLead.city,
+                  state: updatedLead.state,
+                  updatedByUserId: user?.id
                 }),
               });
 
-              if (!response.ok) throw new Error('Failed to update lead');
+              if (!response.ok) {
+                const errorData = await response.json().catch(() => null);
+                throw new Error(errorData?.message || `Failed to update lead: ${response.status}`);
+              }
 
-      setLeads(prev =>
-                prev.map(lead => (lead.id === updatedLead.id ? { ...lead, ...updatedLead } : lead))
-              );
+              const updatedLeadData = await response.json();
               
+              setLeads(prev =>
+                prev.map(lead => (lead.id === updatedLead.id ? { ...lead, ...updatedLeadData } : lead))
+              );
 
               setIsModalOpen(false);
               setSelectedLead(null);
               toast.success('Lead updated successfully');
             } catch (err) {
               console.error('Error updating lead:', err);
-              toast.error('Failed to update lead');
+              toast.error(err instanceof Error ? err.message : 'Failed to update lead');
             }
           }}
           readOnly={false}

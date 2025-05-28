@@ -108,85 +108,62 @@ export const LeadsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     fetchLeads();
   }, [fetchLeads]);
 
-  const updateLead = async (leadId: string, updatedData: Partial<Omit<Lead, 'id' | 'createdAt' | 'updatedAt' | 'assignedBdaId' | 'assignedBdaName'>>) => {
-    if (!user) {
-      throw new Error('User not authenticated for updating lead');
-    }
-    // Optimistic update (optional, for better UX)
-    // const originalLeads = [...bdaLeads];
-    // setBdaLeads(prevLeads => prevLeads.map(l => l.id === leadId ? { ...l, ...updatedData, updatedAt: new Date().toISOString() } : l));
+  const updateLead = async (
+    leadId: string,
+    updatedData: any // Accept any to allow extra fields
+  ) => {
+    if (!user) throw new Error('User not authenticated for updating lead');
 
     try {
       const leadToUpdate = bdaLeads.find(l => l.id === leadId);
       if (!leadToUpdate) throw new Error('Lead not found');
 
-      const currentActionTakenParts: string[] = [];
-      if (updatedData.whatsappSent === true) currentActionTakenParts.push('WhatsApp');
-      if (updatedData.emailSent === true) currentActionTakenParts.push('Email');
-      if (updatedData.quotationSent === true) currentActionTakenParts.push('Quotation');
-      if (updatedData.sampleWorkSent === true) currentActionTakenParts.push('Sample Work');
-
-      let finalActionTaken: string | null = null;
-      if (currentActionTakenParts.length > 0) {
-        finalActionTaken = currentActionTakenParts.join(', ');
-      } else {
-        // If no new actions are specified in updatedData, reconstruct from existing leadToUpdate
-        const existingActionParts: string[] = [];
-        if (leadToUpdate.whatsappSent) existingActionParts.push('WhatsApp');
-        if (leadToUpdate.emailSent) existingActionParts.push('Email');
-        if (leadToUpdate.quotationSent) existingActionParts.push('Quotation');
-        if (leadToUpdate.sampleWorkSent) existingActionParts.push('Sample Work');
-        if (existingActionParts.length > 0) {
-          finalActionTaken = existingActionParts.join(', ');
-        }
+      // Compose actionTaken
+      let actionTaken = updatedData.actionTaken;
+      if (actionTaken === undefined) {
+        const actions: string[] = [];
+        if (updatedData.whatsappSent ?? leadToUpdate.whatsappSent) actions.push('whatsapp');
+        if (updatedData.emailSent ?? leadToUpdate.emailSent) actions.push('email');
+        if (updatedData.quotationSent ?? leadToUpdate.quotationSent) actions.push('quotation');
+        if (updatedData.sampleWorkSent ?? leadToUpdate.sampleWorkSent) actions.push('sample');
+        actionTaken = actions.join(', ');
       }
 
-
-      // Construct a new payload object with only the fields expected by the API
-      const apiPayload: any = {
-        id: parseInt(leadId, 10),
-        name: updatedData.name !== undefined ? updatedData.name : leadToUpdate.name,
-        contactNo: updatedData.phone !== undefined ? updatedData.phone : leadToUpdate.phone,
-        email: updatedData.email !== undefined ? updatedData.email : leadToUpdate.email,
-        industry: updatedData.industry !== undefined ? updatedData.industry : leadToUpdate.industry,
-        service: updatedData.service !== undefined ? updatedData.service : leadToUpdate.service,
-        type: updatedData.type !== undefined ? updatedData.type : leadToUpdate.type,
-        status: updatedData.status !== undefined ? updatedData.status : leadToUpdate.status,
-        assignedTo: leadToUpdate.assignedBdaName,
-        followUp: updatedData.followUpDate !== undefined ? updatedData.followUpDate : leadToUpdate.followUpDate,
-        temperature: updatedData.temperature !== undefined ? updatedData.temperature : leadToUpdate.temperature,
-        intrests: updatedData.interests !== undefined ? updatedData.interests.join(',') : leadToUpdate.interests.join(','),
-        remarks: updatedData.remarks !== undefined ? updatedData.remarks : leadToUpdate.remarks,
-        lastUpdated: new Date().toISOString(),
-        actionTaken: finalActionTaken,
-        // actionStatus: leadToUpdate.actionStatus, // 'actionStatus' is not in our standardized Lead type. If API needs it, it should come from original API data if stored separately or be part of Lead type.
+      const apiPayload = {
+        name: updatedData.name ?? leadToUpdate.name ?? '',
+        contactNo: updatedData.phone ?? leadToUpdate.phone ?? '',
+        email: updatedData.email ?? leadToUpdate.email ?? '',
+        status: updatedData.status ?? leadToUpdate.status ?? '',
+        actionStatus: updatedData.actionStatus ?? updatedData.temperature ?? '',
+        assignedTo: updatedData.assignedTo ?? leadToUpdate.assignedBdaName ?? '',
+        intrests: Array.isArray(updatedData.interests)
+          ? updatedData.interests.join(', ')
+          : (updatedData.intrests ?? ''),
+        remarks: updatedData.remarks ?? leadToUpdate.remarks ?? '',
+        actionTaken: actionTaken ?? '',
+        followUp: updatedData.followUp ?? updatedData.followUpDate ?? leadToUpdate.followUpDate ?? '',
+        loggedinId: user.id,
+        companyName: updatedData.companyName ?? '',
+        industry: updatedData.industry ?? leadToUpdate.industry ?? '',
+        city: updatedData.city ?? '',
+        state: updatedData.state ?? ''
       };
-      // If your API has an 'actionStatus' field and it's important, ensure it's handled.
-      // For now, assuming it's not part of the standardized Lead type used in the frontend primarily.
 
-
-      const response = await fetch(`http://localhost:8080/api/leads/update/${leadId}`, {
+      const response = await fetch(`http://localhost:8080/api/leads/update/${parseInt(leadId, 10)}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          // Add Authorization header if needed:
-          // 'Authorization': `Bearer ${user.token}`,
-        },
-        body: JSON.stringify(apiPayload), // Use apiPayload here
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(apiPayload),
       });
 
       if (!response.ok) {
         const errorData = await response.text();
         throw new Error(`HTTP error! Status: ${response.status}. ${errorData}`);
       }
-      // Refresh leads from server to get the most up-to-date state
       await fetchLeads();
     } catch (err) {
       console.error('Error updating lead:', err);
-      // Rollback optimistic update if it was implemented
-      // setBdaLeads(originalLeads);
       setError(err instanceof Error ? err.message : 'Failed to update lead.');
-      throw err; // Re-throw to be caught by the calling component
+      throw err;
     }
   };
 
