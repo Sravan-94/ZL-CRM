@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   BarChart, 
   Bar, 
@@ -11,25 +11,83 @@ import {
   Legend, 
   ResponsiveContainer 
 } from 'recharts';
-import { generateMockBDAPerformance, mockLeads, mockUsers } from '../../data/mockData';
-import { CalendarClock, CheckCircle, PhoneCall, FileText, Copy } from 'lucide-react';
+import { CalendarClock, CheckCircle, PhoneCall, FileText } from 'lucide-react';
 import { format, subDays, parseISO } from 'date-fns';
+
+interface Lead {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  industry: string;
+  companyName: string;
+  city: string;
+  state: string;
+  status: string;
+  assignedTo: string | null;
+  followUpDate: string | null;
+  temperature: string;
+  interests: string;
+  remarks: string;
+  actionStatus: string;
+  actionTaken: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface User {
+  id: string;
+  name: string;
+  role: string;
+}
 
 const AdminReports = () => {
   const [dateRange, setDateRange] = useState<'7days' | '30days' | '90days'>('7days');
   const [selectedBda, setSelectedBda] = useState<string>('all');
-  
-  // Get BDA performance data
-  const bdaPerformance = generateMockBDAPerformance();
-  const bdaUsers = mockUsers.filter(user => user.role === 'bda');
-  
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch leads and users from API
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        // Fetch leads
+        const leadsResponse = await fetch('http://localhost:8080/api/leads/getall');
+        if (!leadsResponse.ok) throw new Error(`Failed to fetch leads: ${leadsResponse.status}`);
+        const leadsData = await leadsResponse.json();
+        console.log('Fetched leads:', leadsData); // Debug log
+        setLeads(leadsData);
+
+        // Fetch users
+        const usersResponse = await fetch('http://localhost:8080/api/bda-users');
+        if (!usersResponse.ok) throw new Error(`Failed to fetch users: ${usersResponse.status}`);
+        const usersData = await usersResponse.json();
+        console.log('Fetched users:', usersData); // Debug log
+        setUsers(usersData);
+
+        setError(null);
+      } catch (err) {
+        console.error('Error fetching data:', err);
+        setError(err instanceof Error ? err.message : 'Failed to fetch data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
   // Filter leads based on selected BDA
-  const filteredLeads = selectedBda === 'all' 
-    ? mockLeads 
-    : mockLeads.filter(lead => lead.assignedBdaId === selectedBda);
-  
+  const filteredLeads = useMemo(() => {
+    if (selectedBda === 'all') return leads;
+    return leads.filter(lead => lead.assignedTo === selectedBda);
+  }, [leads, selectedBda]);
+
   // Generate daily activity data for the selected date range
-  const generateDailyActivityData = () => {
+  const dailyActivityData = useMemo(() => {
     let days = 7;
     switch (dateRange) {
       case '30days':
@@ -48,16 +106,39 @@ const AdminReports = () => {
       const date = subDays(new Date(), i);
       const dateStr = format(date, 'yyyy-MM-dd');
       
-      // Count leads updated on this date
+      // Count all updates on this date as calls
       const updatedLeads = filteredLeads.filter(lead => {
-        const leadDate = format(parseISO(lead.updatedAt), 'yyyy-MM-dd');
-        return leadDate === dateStr;
+        if (!lead.updatedAt) return false;
+        try {
+          const leadDate = format(parseISO(lead.updatedAt), 'yyyy-MM-dd');
+          return leadDate === dateStr;
+        } catch (error) {
+          console.error('Error parsing date:', error);
+          return false;
+        }
       });
       
+      // Count all updates as calls
       const calls = updatedLeads.length;
-      const followups = updatedLeads.filter(lead => lead.followUpDate).length;
-      const quotations = updatedLeads.filter(lead => lead.quotationSent).length;
-      const closedWon = updatedLeads.filter(lead => lead.status === 'closed_won').length;
+      
+      // Count follow-ups, quotations, and closed deals
+      const followups = updatedLeads.filter(lead => {
+        if (!lead.followUpDate) return false;
+        try {
+          const followUpDate = format(parseISO(lead.followUpDate), 'yyyy-MM-dd');
+          return followUpDate === dateStr;
+        } catch (error) {
+          return false;
+        }
+      }).length;
+
+      const quotations = updatedLeads.filter(lead => 
+        lead.actionTaken?.toLowerCase().includes('quotation')
+      ).length;
+
+      const closedWon = updatedLeads.filter(lead => 
+        lead.status?.toLowerCase() === 'closed_won'
+      ).length;
       
       data.push({
         date: format(date, 'MMM d'),
@@ -69,12 +150,10 @@ const AdminReports = () => {
     }
     
     return data;
-  };
-  
-  const dailyActivityData = generateDailyActivityData();
-  
+  }, [filteredLeads, dateRange]);
+
   // Calculate metrics for the selected BDA and date range
-  const calculateMetrics = () => {
+  const metrics = useMemo(() => {
     let days = 7;
     switch (dateRange) {
       case '30days':
@@ -91,14 +170,27 @@ const AdminReports = () => {
     
     // Filter leads updated within the date range
     const recentLeads = filteredLeads.filter(lead => {
-      const updatedDate = parseISO(lead.updatedAt);
-      return updatedDate >= startDate;
+      if (!lead.updatedAt) return false;
+      try {
+        const updatedDate = parseISO(lead.updatedAt);
+        return updatedDate >= startDate;
+      } catch (error) {
+        console.error('Error parsing date:', error);
+        return false;
+      }
     });
     
+    // Count all updates as calls
     const totalCalls = recentLeads.length;
+    
+    // Count follow-ups, quotations, and closed deals
     const followupsMade = recentLeads.filter(lead => lead.followUpDate).length;
-    const quotationsSent = recentLeads.filter(lead => lead.quotationSent).length;
-    const dealsClosed = recentLeads.filter(lead => lead.status === 'closed_won').length;
+    const quotationsSent = recentLeads.filter(lead => 
+      lead.actionTaken?.toLowerCase().includes('quotation')
+    ).length;
+    const dealsClosed = recentLeads.filter(lead => 
+      lead.status?.toLowerCase() === 'closed_won'
+    ).length;
     
     return {
       totalCalls,
@@ -106,29 +198,70 @@ const AdminReports = () => {
       quotationsSent,
       dealsClosed
     };
-  };
-  
-  const metrics = calculateMetrics();
-  
+  }, [filteredLeads, dateRange]);
+
   // Get conversion rate
-  const getConversionRate = () => {
+  const conversionRate = useMemo(() => {
     if (filteredLeads.length === 0) return 0;
     
     const closedWon = filteredLeads.filter(lead => lead.status === 'closed_won').length;
     return Math.round((closedWon / filteredLeads.length) * 100);
-  };
-  
-  const conversionRate = getConversionRate();
-  
+  }, [filteredLeads]);
+
   // Get recent lead updates
-  const getRecentLeadUpdates = () => {
-    // Sort leads by updatedAt (most recent first)
+  const recentLeadUpdates = useMemo(() => {
     return [...filteredLeads]
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+      .filter(lead => lead.updatedAt) // Only include leads with updatedAt
+      .sort((a, b) => {
+        try {
+          return new Date(b.updatedAt!).getTime() - new Date(a.updatedAt!).getTime();
+        } catch (error) {
+          console.error('Error sorting dates:', error);
+          return 0;
+        }
+      })
       .slice(0, 10);
-  };
-  
-  const recentLeadUpdates = getRecentLeadUpdates();
+  }, [filteredLeads]);
+
+  // Generate BDA performance data
+  const bdaPerformance = useMemo(() => {
+    return users
+      .filter(user => user.role?.toLowerCase() === 'bda')
+      .map(bda => {
+        const bdaLeads = leads.filter(lead => 
+          lead.assignedTo?.toLowerCase() === bda.name.toLowerCase() ||
+          lead.assignedTo?.toString() === bda.id.toString()
+        );
+        
+        return {
+          bdaName: bda.name,
+          totalLeads: bdaLeads.length,
+          followupsMade: bdaLeads.filter(lead => lead.followUpDate).length,
+          quotationsSent: bdaLeads.filter(lead => 
+            lead.actionTaken?.toLowerCase().includes('quotation')
+          ).length,
+          dealsClosed: bdaLeads.filter(lead => 
+            lead.status?.toLowerCase() === 'closed_won'
+          ).length
+        };
+      });
+  }, [leads, users]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-slate-500">Loading reports data...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-100 text-red-800 px-4 py-2 rounded-lg">
+        {error}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -145,9 +278,11 @@ const AdminReports = () => {
                        focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50 text-sm"
             >
               <option value="all">All BDAs</option>
-              {bdaUsers.map((bda) => (
-                <option key={bda.id} value={bda.id}>{bda.name}</option>
-              ))}
+              {users
+                .filter(user => user.role === 'BDA')
+                .map((bda) => (
+                  <option key={bda.id} value={bda.id}>{bda.name}</option>
+                ))}
             </select>
             
             <div className="flex rounded-md shadow-sm">
@@ -382,31 +517,31 @@ const AdminReports = () => {
                     <div>
                       <div className="text-sm font-medium text-slate-800">{lead.name}</div>
                       <div className="text-sm text-slate-500">
-                        {lead.assignedBdaName || 'Unassigned'} • {lead.status.charAt(0).toUpperCase() + lead.status.slice(1).replace('_', ' ')}
+                        {lead.assignedTo || 'Unassigned'} • {lead.status.charAt(0).toUpperCase() + lead.status.slice(1).replace('_', ' ')}
                       </div>
                     </div>
                     <div className="text-xs text-slate-500">
-                      {format(parseISO(lead.updatedAt), 'MMM d, h:mm a')}
+                      {lead.updatedAt ? format(parseISO(lead.updatedAt), 'MMM d, h:mm a') : 'No update date'}
                     </div>
                   </div>
                   
                   <div className="mt-1 flex flex-wrap gap-2">
-                    {lead.whatsappSent && (
+                    {lead.actionTaken?.includes('whatsapp') && (
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
                         WhatsApp Sent
                       </span>
                     )}
-                    {lead.emailSent && (
+                    {lead.actionTaken?.includes('email') && (
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
                         Email Sent
                       </span>
                     )}
-                    {lead.quotationSent && (
+                    {lead.actionTaken?.includes('quotation') && (
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
                         Quotation Sent
                       </span>
                     )}
-                    {lead.sampleWorkSent && (
+                    {lead.actionTaken?.includes('sample') && (
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
                         Sample Work Sent
                       </span>

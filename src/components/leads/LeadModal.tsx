@@ -37,9 +37,11 @@ interface LeadModalProps {
 
 const LeadModal: React.FC<LeadModalProps> = ({ isOpen, onClose, lead, onSave, readOnly = false }) => {
   const [formData, setFormData] = useState<Lead>({ ...lead });
+  const [remarksError, setRemarksError] = useState<string>('');
 
   useEffect(() => {
     setFormData({ ...lead });
+    setRemarksError('');
   }, [lead, isOpen]);
 
   const handleChange = (
@@ -81,6 +83,14 @@ const handleCheckboxArrayChange = (
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    
+    // Validate remarks
+    if (!formData.remarks || formData.remarks.trim() === '') {
+      setRemarksError('Remarks are required');
+      return;
+    }
+    
+    setRemarksError('');
     const actionTaken = [
       formData.whatsappSent ? 'whatsapp' : '',
       formData.emailSent ? 'email' : '',
@@ -192,15 +202,21 @@ const handleCheckboxArrayChange = (
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-semibold text-gray-700">Remarks</label>
+                  <label className="block text-sm font-semibold text-gray-700">
+                    Remarks <span className="text-red-500">*</span>
+                  </label>
                   <textarea
                     name="remarks"
                     value={formData.remarks || ''}
                     onChange={handleChange}
                     disabled={readOnly}
                     rows={3}
-                    className="mt-1 w-full rounded-lg border border-gray-300 p-2 shadow-sm"
+                    className={`mt-1 w-full rounded-lg border ${remarksError ? 'border-red-500' : 'border-gray-300'} p-2 shadow-sm`}
+                    placeholder="Enter remarks (required)"
                   />
+                  {remarksError && (
+                    <p className="mt-1 text-sm text-red-500">{remarksError}</p>
+                  )}
                 </div>
               </div>
 

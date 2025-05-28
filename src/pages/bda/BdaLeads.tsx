@@ -7,6 +7,8 @@ import {
   ChevronUp,
   CheckCircle,
   Clock,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { format, parseISO, isToday, isBefore } from 'date-fns';
@@ -59,6 +61,8 @@ const BdaDashboard = () => {
   const [temperatureFilter, setTemperatureFilter] = useState<string>('all');
   const [activeCardFilter, setActiveCardFilter] = useState<'today' | 'overdue' | 'closed' | 'all'>('all');
   const [error, setError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const leadsPerPage = 50;
 
   useEffect(() => {
     if (!user) {
@@ -226,6 +230,19 @@ const BdaDashboard = () => {
       }
       return new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
     });
+
+  // Calculate pagination
+  const totalPages = Math.ceil(filteredLeads.length / leadsPerPage);
+  const startIndex = (currentPage - 1) * leadsPerPage;
+  const endIndex = startIndex + leadsPerPage;
+  const currentLeads = filteredLeads.slice(startIndex, endIndex);
+
+  // Handle page change
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    // Scroll to top of the table
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const getFollowUpStatusClass = (followUpDate: string | null) => {
     if (!followUpDate) return '';
@@ -511,14 +528,14 @@ const BdaDashboard = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-slate-200">
-              {filteredLeads.length === 0 ? (
+              {currentLeads.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-4 text-center text-sm text-slate-500">
                     No leads found. Try adjusting your filters or check your assigned leads.
                   </td>
                 </tr>
               ) : (
-                filteredLeads.map((lead) => {
+                currentLeads.map((lead) => {
                   const actionsTaken = lead.actionTaken
                     ? lead.actionTaken
                         .split(',')
@@ -581,48 +598,70 @@ const BdaDashboard = () => {
             </tbody>
           </table>
         </div>
-      </div>
 
-      <div className="bg-white rounded-lg border shadow-sm">
-        <div className="px-4 py-4 sm:px-6 py-4 border-b border-gray-200">
-          <div className="flex justify-between items-center">
-            <h2 className="font-medium text-gray-900">Recent Activity</h2>
-            <div className="text-sm font-medium text-blue-600 hover:text-blue-600 cursor-pointer">
-              View all
+        {/* Pagination controls */}
+        {totalPages > 1 && (
+          <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between">
+            <div className="flex-1 flex justify-between sm:hidden">
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="relative inline-flex items-center px-4 py-2 border border-slate-300 text-sm font-medium rounded-md text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="ml-3 relative inline-flex items-center px-4 py-2 border border-slate-300 text-sm font-medium rounded-md text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
+            <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm text-slate-700">
+                  Showing <span className="font-medium">{startIndex + 1}</span> to{' '}
+                  <span className="font-medium">{Math.min(endIndex, filteredLeads.length)}</span> of{' '}
+                  <span className="font-medium">{filteredLeads.length}</span> leads
+                </p>
+              </div>
+              <div>
+                <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                  <button
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-slate-300 bg-white text-sm font-medium text-slate-500 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span className="sr-only">Previous</span>
+                    <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+                  </button>
+                  {[...Array(totalPages)].map((_, index) => (
+                    <button
+                      key={index + 1}
+                      onClick={() => handlePageChange(index + 1)}
+                      className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                        currentPage === index + 1
+                          ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
+                          : 'bg-white border-slate-300 text-slate-500 hover:bg-slate-50'
+                      }`}
+                    >
+                      {index + 1}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-slate-300 bg-white text-sm font-medium text-slate-500 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span className="sr-only">Next</span>
+                    <ChevronRight className="h-5 w-5" aria-hidden="true" />
+                  </button>
+                </nav>
+              </div>
             </div>
           </div>
-        </div>
-        <div className="divide-y-2 divide-gray-200 max-h-96">
-          {recentActivity.length === 0 ? (
-            <div className="px-4 py-4 sm:px-6 py-4 text-center text-sm text-gray-600">
-              No recent activity
-            </div>
-          ) : (
-            recentActivity.map((activity, index) => (
-              <div key={index} className="px-4 py-4 sm:px-6 py-4">
-                <div className="flex items-start">
-                  <div className="mr-4 flex-shrink-0">
-                    <CheckCircle className="h-5 w-5 text-gray-600" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">
-                          {activity.performedBy}
-                          <span className="font-normal text-gray-600"> {activity.action}</span>
-                        </p>
-                        <p className="text-sm text-gray-600">Lead: {activity.leadName}</p>
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {format(new Date(activity.timestamp), 'MMM d, h:mm a')}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+        )}
       </div>
 
       {selectedLead && (
