@@ -167,18 +167,26 @@ const AdminReports = () => {
     }
     
     const startDate = subDays(new Date(), days);
+    console.log('Start date for metrics:', startDate); // Debug log
     
     // Filter leads updated within the date range
     const recentLeads = filteredLeads.filter(lead => {
-      if (!lead.updatedAt) return false;
+      if (!lead.updatedAt) {
+        console.log('Lead has no updatedAt:', lead); // Debug log
+        return false;
+      }
       try {
         const updatedDate = parseISO(lead.updatedAt);
-        return updatedDate >= startDate;
+        const isRecent = updatedDate >= startDate;
+        console.log('Lead update date:', updatedDate, 'Is recent:', isRecent); // Debug log
+        return isRecent;
       } catch (error) {
-        console.error('Error parsing date:', error);
+        console.error('Error parsing date:', error, 'Lead:', lead); // Debug log
         return false;
       }
     });
+    
+    console.log('Recent leads count:', recentLeads.length); // Debug log
     
     // Count all updates as calls
     const totalCalls = recentLeads.length;
@@ -192,12 +200,15 @@ const AdminReports = () => {
       lead.status?.toLowerCase() === 'closed_won'
     ).length;
     
-    return {
+    const metricsResult = {
       totalCalls,
       followupsMade,
       quotationsSent,
       dealsClosed
     };
+    
+    console.log('Calculated metrics:', metricsResult); // Debug log
+    return metricsResult;
   }, [filteredLeads, dateRange]);
 
   // Get conversion rate

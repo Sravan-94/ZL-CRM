@@ -16,52 +16,7 @@ import { toast } from 'react-hot-toast';
 import Papa from 'papaparse';
 import LeadModal from '../../components/leads/LeadModal';
 import { useAuth } from '../../contexts/AuthContext';
-
-interface Lead {
-  id: string;
-  name: string | null;
-  phone: string | null;
-  email: string | null;
-  industry: string | null;
-  companyName: string | null;
-  city: string | null;
-  state: string | null;
-  status: LeadStatus;
-  assignedBdaId: string | null;
-  assignedBdaName: string | null;
-  followUpDate: string | null;
-  intrests: string | null;
-  remarks: string | null;
-  actionStatus: string | null;
-  actionTaken: string | null;
-  createdAt: string;
-  updatedAt: string;
-  loggedinId?: number;
-  whatsappSent?: boolean;
-  emailSent?: boolean;
-  quotationSent?: boolean;
-  sampleWorkSent?: boolean;
-  MeetingBooked?: boolean;
-  DemoScheduled?: boolean;
-  NeedMoreInfo?: boolean;
-  WaitingForDecision?: boolean;
-}
-
-type LeadStatus =
-  | 'new'
-  | 'contacted'
-  | 'qualified'
-  | 'proposal'
-  | 'negotiation'
-  | 'closed_won'
-  | 'closed_lost'
-  | 'warm'
-  | 'WrongNumber'
-  | 'NotAnswered'
-  | 'CallBackLater'
-  | 'Interested'
-  | 'NotInterested'
-  | 'SwitchedOff';
+import { Lead, LeadStatus } from '../../types/lead';
 
 interface User {
   id: string;
@@ -117,8 +72,8 @@ const BdaLeads = () => {
               remarks: lead.remarks || null,
               actionStatus: lead.actionStatus || null,
               actionTaken: lead.actionTaken || null,
-              createdAt: lead.createdAt || new Date().toISOString(),
-              updatedAt: lead.lastUpdated || new Date().toISOString(),
+              createdAt: (typeof lead.createdAt === 'string' && lead.createdAt) ? lead.createdAt : new Date().toISOString(),
+              updatedAt: (typeof lead.lastUpdated === 'string' && lead.lastUpdated) ? lead.lastUpdated : new Date().toISOString(),
               whatsappSent: lead.actionTaken?.includes('whatsapp') || false,
               emailSent: lead.actionTaken?.includes('email') || false,
               quotationSent: lead.actionTaken?.includes('quotation') || false,
@@ -219,7 +174,11 @@ const BdaLeads = () => {
     });
 
   const handleOpenLeadModal = (lead: Lead) => {
-    setSelectedLead(lead);
+    setSelectedLead({
+      ...lead,
+      createdAt: lead.createdAt || new Date().toISOString(),
+      updatedAt: lead.updatedAt || new Date().toISOString(),
+    });
     setIsModalOpen(true);
   };
 
@@ -250,16 +209,22 @@ const BdaLeads = () => {
       if (!response.ok) throw new Error('Failed to assign leads');
 
       setLeads(leads =>
-        leads.map(lead =>
-          selectedLeads.has(lead.id)
+        leads.map(lead => {
+          const updatedLead = selectedLeads.has(lead.id)
             ? {
                 ...lead,
                 assignedBdaId: selectedBda.id,
                 assignedBdaName: selectedBda.name,
                 updatedAt: new Date().toISOString(),
               }
-            : lead
-        )
+            : lead;
+          // Ensure createdAt and updatedAt are strings for the new state
+          return {
+            ...updatedLead,
+            createdAt: typeof updatedLead.createdAt === 'string' ? updatedLead.createdAt : new Date().toISOString(),
+            updatedAt: typeof updatedLead.updatedAt === 'string' ? updatedLead.updatedAt : new Date().toISOString(),
+          };
+        })
       );
 
       setSelectedLeads(new Set());
@@ -315,8 +280,8 @@ const BdaLeads = () => {
             remarks: lead.remarks || null,
             actionStatus: lead.actionStatus || null,
             actionTaken: lead.actionTaken || null,
-            createdAt: lead.createdAt || new Date().toISOString(),
-            updatedAt: lead.lastUpdated || new Date().toISOString(),
+            createdAt: (typeof lead.createdAt === 'string' && lead.createdAt) ? lead.createdAt : new Date().toISOString(),
+            updatedAt: (typeof lead.lastUpdated === 'string' && lead.lastUpdated) ? lead.lastUpdated : new Date().toISOString(),
             whatsappSent: lead.actionTaken?.includes('whatsapp') || false,
             emailSent: lead.actionTaken?.includes('email') || false,
             quotationSent: lead.actionTaken?.includes('quotation') || false,
@@ -376,7 +341,8 @@ const BdaLeads = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
         <h1 className="text-2xl font-semibold text-slate-800">Leads Management</h1>
         <div className="flex flex-wrap gap-2">
-          <button
+          {/* Remove Assign Leads Button */}
+          {/* <button
             onClick={() => setIsAssigningLeads(!isAssigningLeads)}
             disabled={isLoading}
             className={`px-3 py-2 text-sm font-medium rounded-md flex items-center ${
@@ -387,8 +353,9 @@ const BdaLeads = () => {
           >
             <UserPlus className="h-4 w-4 mr-1.5" />
             Assign Leads
-          </button>
-          <button
+          </button> */}
+          {/* Remove Import CSV Button */}
+          {/* <button
             onClick={() => fileInputRef.current?.click()}
             disabled={isLoading}
             className="px-3 py-2 text-sm font-medium rounded-md bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 flex items-center disabled:opacity-50"
@@ -402,15 +369,16 @@ const BdaLeads = () => {
               accept=".csv"
               className="hidden"
             />
-          </button>
-          <button
+          </button> */}
+          {/* Remove Export CSV Button */}
+          {/* <button
             onClick={handleExportCSV}
             disabled={isLoading}
             className="px-3 py-2 text-sm font-medium rounded-md bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 flex items-center disabled:opacity-50"
           >
             <Download className="h-4 w-4 mr-1.5" />
             Export CSV
-          </button>
+          </button> */}
         </div>
       </div>
 
@@ -729,7 +697,7 @@ const BdaLeads = () => {
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {isValidDate(lead.updatedAt) ? (
+                        {lead.updatedAt && isValidDate(lead.updatedAt) ? (
                           <div className="text-sm text-gray-500">
                             {format(parseISO(lead.updatedAt), 'MMM d, yyyy h:mm a')}
                           </div>
@@ -756,31 +724,29 @@ const BdaLeads = () => {
           lead={selectedLead}
           onSave={async (updatedLead: Lead) => {
             try {
-              if (!user || !user.id) {
+              if (!user || user.id == null) {
                 toast.error('User authentication required.');
                 console.error('Auth user missing:', user);
                 return false;
               }
 
               const payload = {
-                name: updatedLead.name || null,
-                email: updatedLead.email || null,
-                contactNo: updatedLead.phone || null,
-                status: updatedLead.status || null,
-                assignedTo: updatedLead.assignedBdaName || null,
-                followUp: updatedLead.followUpDate || null,
-                intrests: updatedLead.intrests || null,
-                remarks: updatedLead.remarks || null,
-                actionStatus: updatedLead.actionStatus || null,
-                actionTaken: updatedLead.actionTaken || null,
+                name: updatedLead.name ?? "",
+                contactNo: updatedLead.phone ?? "",
+                email: updatedLead.email ?? "",
+                status: updatedLead.status ?? "",
+                actionStatus: updatedLead.actionStatus ?? "",
+                assignedTo: updatedLead.assignedBdaName ?? "",
+                intrests: updatedLead.intrests ?? "",
+                remarks: updatedLead.remarks ?? "",
+                actionTaken: updatedLead.actionTaken ?? "",
+                followUp: updatedLead.followUpDate ?? "",
                 loggedinId: Number(user.id),
-                companyName: updatedLead.companyName || null,
-                industry: updatedLead.industry || null,
-                city: updatedLead.city || null,
-                state: updatedLead.state || null,
+                companyName: updatedLead.companyName ?? "",
+                industry: updatedLead.industry ?? "",
+                city: updatedLead.city ?? "",
+                state: updatedLead.state ?? ""
               };
-
-              console.log('PUT payload:', payload);
 
               const response = await fetch(`http://localhost:8080/api/leads/update/${updatedLead.id}`, {
                 method: 'PUT',
@@ -821,8 +787,8 @@ const BdaLeads = () => {
                     remarks: lead.remarks || null,
                     actionStatus: lead.actionStatus || null,
                     actionTaken: lead.actionTaken || null,
-                    createdAt: lead.createdAt || new Date().toISOString(),
-                    updatedAt: lead.lastUpdated || new Date().toISOString(),
+                    createdAt: (typeof lead.createdAt === 'string' && lead.createdAt) ? lead.createdAt : new Date().toISOString(),
+                    updatedAt: (typeof lead.lastUpdated === 'string' && lead.lastUpdated) ? lead.lastUpdated : new Date().toISOString(),
                     whatsappSent: lead.actionTaken?.includes('whatsapp') || false,
                     emailSent: lead.actionTaken?.includes('email') || false,
                     quotationSent: lead.actionTaken?.includes('quotation') || false,
@@ -845,7 +811,7 @@ const BdaLeads = () => {
               return false;
             }
           }}
-          readOnly={false} // BDAs can always edit their assigned leads
+          readOnly={false}
         />
       )}
     </div>

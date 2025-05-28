@@ -112,7 +112,7 @@ const AdminLeads = () => {
               city: lead.city || null,
               state: lead.state || null,
               status: (lead.status || 'new') as LeadStatus,
-              assignedBdaId: lead.assignedBdaId ? String(lead.assignedBdaId) : null,
+              assignedBdaId: lead.assignedBdaId !== undefined && lead.assignedBdaId !== null ? String(lead.assignedBdaId) : null,
               assignedBdaName: lead.assignedTo || null,
               followUpDate: lead.followUp || null,
               intrests: lead.intrests || null,
@@ -205,6 +205,16 @@ const AdminLeads = () => {
         : String(valueB).localeCompare(String(valueA));
     });
 
+  const totalPages = Math.ceil(filteredLeads.length / leadsPerPage);
+
+  // Pagination helpers
+  const startIndex = (currentPage - 1) * leadsPerPage;
+  const endIndex = startIndex + leadsPerPage;
+  const paginatedLeads = filteredLeads.slice(startIndex, endIndex);
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) setCurrentPage(page);
+  };
+
   const handleOpenLeadModal = (lead: Lead) => {
     setSelectedLead(lead);
     setIsModalOpen(true);
@@ -295,7 +305,7 @@ const AdminLeads = () => {
             city: lead.city || null,
             state: lead.state || null,
             status: (lead.status || 'new') as LeadStatus,
-            assignedBdaId: lead.assignedBdaId ? String(lead.assignedBdaId) : null,
+            assignedBdaId: lead.assignedBdaId !== undefined && lead.assignedBdaId !== null ? String(lead.assignedBdaId) : null,
             assignedBdaName: lead.assignedTo || null,
             followUpDate: lead.followUp || null,
             intrests: lead.intrests || null,
@@ -608,7 +618,7 @@ const AdminLeads = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-slate-200">
-                {filteredLeads.map(lead => (
+                {paginatedLeads.map(lead => (
                   <tr
                     key={lead.id}
                     className="hover:bg-slate-50 cursor-pointer"
@@ -782,41 +792,41 @@ const AdminLeads = () => {
           }}
           lead={selectedLead}
           onSave={async (updatedLead: Lead) => {
+            console.log('handleSubmit start:', { user, userId: user?.id });
+            console.log('Before auth check in handleSubmit:', { user, userId: user?.id, typeOfUser: typeof user, userIdIsNull: user?.id == null });
             if (!user || !user.id) {
               toast.error('User authentication required. Please log in again.');
-              return;
+              return false;
             }
 
             setIsSaving(true);
             try {
               const payload = {
-                name: updatedLead.name || null,
-                email: updatedLead.email || null,
-                contactNo: updatedLead.phone || null,
-                status: updatedLead.status || null,
-                assignedTo: updatedLead.assignedBdaName || null,
-                followUp: updatedLead.followUpDate || null,
-                intrests: updatedLead.intrests || null,
-                remarks: updatedLead.remarks || null,
-                actionStatus: updatedLead.actionStatus || null,
-                actionTaken: updatedLead.actionTaken || null,
+                name: updatedLead.name ?? "",
+                contactNo: updatedLead.phone ?? "",
+                email: updatedLead.email ?? "",
+                status: updatedLead.status ?? "",
+                actionStatus: updatedLead.actionStatus ?? "",
+                assignedTo: updatedLead.assignedBdaName ?? "",
+                intrests: updatedLead.intrests ?? "",
+                remarks: updatedLead.remarks ?? "",
+                actionTaken: updatedLead.actionTaken ?? "",
+                followUp: updatedLead.followUpDate ?? "",
                 loggedinId: Number(user.id),
-                companyName: updatedLead.companyName || null,
-                industry: updatedLead.industry || null,
-                city: updatedLead.city || null,
-                state: updatedLead.state || null,
+                companyName: updatedLead.companyName ?? "",
+                industry: updatedLead.industry ?? "",
+                city: updatedLead.city ?? "",
+                state: updatedLead.state ?? ""
               };
-
               const response = await fetch(`http://localhost:8080/api/leads/update/${updatedLead.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
               });
-
               if (!response.ok) {
                 const errorText = await response.text();
                 toast.error(errorText.includes('User not found') ? 'Invalid user ID.' : `Failed to update lead: ${errorText}`);
-                return;
+                return false;
               }
 
               const leadsResponse = await fetch('http://localhost:8080/api/leads/getall');
@@ -834,7 +844,7 @@ const AdminLeads = () => {
                     city: lead.city || null,
                     state: lead.state || null,
                     status: (lead.status || 'new') as LeadStatus,
-                    assignedBdaId: lead.assignedBdaId ? String(lead.assignedBdaId) : null,
+                    assignedBdaId: lead.assignedBdaId !== undefined && lead.assignedBdaId !== null ? String(lead.assignedBdaId) : null,
                     assignedBdaName: lead.assignedTo || null,
                     followUpDate: lead.followUp || null,
                     intrests: lead.intrests || null,
@@ -850,9 +860,11 @@ const AdminLeads = () => {
               setIsModalOpen(false);
               setSelectedLead(null);
               toast.success('Lead updated successfully');
+              return true;
             } catch (err) {
               console.error('Error updating lead:', err);
               toast.error('Failed to update lead');
+              return false;
             } finally {
               setIsSaving(false);
             }
