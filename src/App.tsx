@@ -2,12 +2,15 @@ import { BrowserRouter as Router } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import AppRoutes from './routes/AppRoutes';
 import { AuthProvider } from './contexts/AuthContext';
+import { LeadsProvider } from './contexts/LeadsContext'; // Import LeadsProvider
+
 function App() {
   return (
     <AuthProvider>
-      <Router>
-        <Toaster 
-          position="top-right"
+      <LeadsProvider> {/* Wrap with LeadsProvider */}
+        <Router>
+          <Toaster
+            position="top-right"
           toastOptions={{
             duration: 4000,
             style: {
@@ -33,7 +36,8 @@ function App() {
         />
         <AppRoutes />
         
-      </Router>
+        </Router>
+      </LeadsProvider> {/* Close LeadsProvider */}
     </AuthProvider>
   );
 }
