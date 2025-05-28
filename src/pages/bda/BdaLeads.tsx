@@ -91,7 +91,7 @@ const BdaDashboard = () => {
           assignedBdaId: lead.assignedBdaId ? String(lead.assignedBdaId) : null,
           assignedBdaName: lead.assignedTo || null,
           followUpDate: lead.followUp || null,
-          temperature: lead.temperature || '',
+          temperature: lead.actionStatus || '',
           interests: lead.intrests || '',
           remarks: lead.remarks || '',
           actionStatus: lead.actionStatus || '',
