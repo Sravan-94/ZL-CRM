@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   ArrowUpDown,
   Search,
@@ -11,15 +11,52 @@ import {
   ChevronDown,
   ChevronUp,
   ChevronLeft,
-  ChevronRight,
-  Clock
+  ChevronRight
 } from 'lucide-react';
-import { format, parseISO, isValid, isToday, isBefore } from 'date-fns';
+import { format, parseISO, isValid } from 'date-fns';
 import { toast } from 'react-hot-toast';
 import Papa from 'papaparse';
 import LeadModal from '../../components/leads/LeadModal';
 import { useAuth } from '../../contexts/AuthContext';
-import { Lead, LeadStatus } from '../../types/lead';
+
+interface Lead {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  industry: string | null;
+  companyName: string | null;
+  city: string | null;
+  state: string | null;
+  status: LeadStatus;
+  assignedBdaId: string | null;
+  assignedBdaName: string | null;
+  followUpDate: string | null;
+  intrests: string | null;
+  remarks: string | null;
+  actionStatus: string | null;
+  actionTaken: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lastUpdated?: string;
+  loggedinId?: number;
+}
+
+type LeadStatus =
+  | 'new'
+  | 'contacted'
+  | 'qualified'
+  | 'proposal'
+  | 'negotiation'
+  | 'closed_won'
+  | 'closed_lost'
+  | 'warm'
+  | 'WrongNumber'
+  | 'NotAnswered'
+  | 'CallBackLater'
+  | 'Interested'
+  | 'NotInterested'
+  | 'SwitchedOff';
 
 interface User {
   id: string;
@@ -38,7 +75,6 @@ const AdminLeads = () => {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<LeadStatus | 'all'>('all');
   const [bdaFilter, setBdaFilter] = useState<string>('all');
-  const [followUpFilter, setFollowUpFilter] = useState<'all' | 'today' | 'overdue'>('all');
   const [isAssigningLeads, setIsAssigningLeads] = useState(false);
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
   const [selectedBdaForAssignment, setSelectedBdaForAssignment] = useState<string>('');
@@ -152,6 +188,7 @@ const AdminLeads = () => {
     })));
   }, [sortBy, sortDirection, leads]);
 
+  // Define the order of statuses
   const statusOrder: Record<LeadStatus, number> = {
     'new': 1,
     'contacted': 2,
@@ -179,20 +216,10 @@ const AdminLeads = () => {
       const matchesBda =
         bdaFilter === 'all' ||
         (bdaFilter === 'unassigned' ? !lead.assignedBdaId : lead.assignedBdaId === bdaFilter);
-      const matchesFollowUp =
-        followUpFilter === 'all' ||
-        (followUpFilter === 'today' &&
-          lead.followUpDate &&
-          isValid(parseISO(lead.followUpDate)) &&
-          isToday(parseISO(lead.followUpDate))) ||
-        (followUpFilter === 'overdue' &&
-          lead.followUpDate &&
-          isValid(parseISO(lead.followUpDate)) &&
-          isBefore(parseISO(lead.followUpDate), new Date()) &&
-          !isToday(parseISO(lead.followUpDate)));
-      return matchesSearch && matchesStatus && matchesBda && matchesFollowUp;
+      return matchesSearch && matchesStatus && matchesBda;
     })
     .sort((a, b) => {
+      // First sort by status using the predefined order
       const statusA = statusOrder[a.status] || 999;
       const statusB = statusOrder[b.status] || 999;
       
@@ -200,39 +227,22 @@ const AdminLeads = () => {
         return statusA - statusB;
       }
 
+      // If status is the same, sort by lastUpdated within the status group
       const dateA = new Date(a.lastUpdated || a.updatedAt || '').getTime();
       const dateB = new Date(b.lastUpdated || b.updatedAt || '').getTime();
       console.log(`Comparing dates for ${a.name} (${a.status}): ${dateA} vs ${b.name} (${b.status}): ${dateB}`);
-      return dateA - dateB;
+      return dateA - dateB; // Ascending order for dates within status group
     });
 
   const totalPages = Math.ceil(filteredLeads.length / leadsPerPage);
 
+  // Pagination helpers
   const startIndex = (currentPage - 1) * leadsPerPage;
   const endIndex = startIndex + leadsPerPage;
   const paginatedLeads = filteredLeads.slice(startIndex, endIndex);
   const handlePageChange = (page: number) => {
     if (page >= 1 && page <= totalPages) setCurrentPage(page);
   };
-
-  const todayFollowupsCount = useMemo(() => {
-    return leads.filter(lead => 
-      lead.followUpDate && isValid(parseISO(lead.followUpDate)) && isToday(parseISO(lead.followUpDate))
-    ).length;
-  }, [leads]);
-
-  const overdueFollowupsCount = useMemo(() => {
-    return leads.filter(lead => 
-      lead.followUpDate && 
-      isValid(parseISO(lead.followUpDate)) && 
-      isBefore(parseISO(lead.followUpDate), new Date()) && 
-      !isToday(parseISO(lead.followUpDate))
-    ).length;
-  }, [leads]);
-
-  const closedDealsCount = useMemo(() => {
-    return leads.filter(lead => lead.status === 'closed_won').length;
-  }, [leads]);
 
   const handleOpenLeadModal = (lead: Lead) => {
     setSelectedLead({
@@ -383,15 +393,6 @@ const AdminLeads = () => {
     toast.success('Leads exported successfully');
   };
 
-  const handleClearFilters = () => {
-    setStatusFilter('all');
-    setBdaFilter('all');
-    setFollowUpFilter('all');
-    setSearchTerm('');
-    setFiltersOpen(false);
-    setCurrentPage(1);
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
@@ -500,25 +501,15 @@ const AdminLeads = () => {
             disabled={isLoading}
           />
         </div>
-        <div className="flex space-x-2 w-full sm:w-auto">
-          <button
-            onClick={() => setFiltersOpen(!filtersOpen)}
-            className="px-3 py-2 text-sm font-medium rounded-md bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 flex items-center w-full sm:w-auto justify-center disabled:opacity-50"
-            disabled={isLoading}
-          >
-            <Filter className="h-4 w-4 mr-1.5" />
-            Filter
-            {filtersOpen ? <ChevronUp className="h-4 w-4 ml-1.5" /> : <ChevronDown className="h-4 w-4 ml-1.5" />}
-          </button>
-          <button
-            onClick={handleClearFilters}
-            className="px-3 py-2 text-sm font-medium rounded-md bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 flex items-center w-full sm:w-auto justify-center disabled:opacity-50"
-            disabled={isLoading}
-          >
-            <X className="h-4 w-4 mr-1.5" />
-            Clear Filters
-          </button>
-        </div>
+        <button
+          onClick={() => setFiltersOpen(!filtersOpen)}
+          className="px-3 py-2 text-sm font-medium rounded-md bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 flex items-center sm:w-auto w-full justify-center disabled:opacity-50"
+          disabled={isLoading}
+        >
+          <Filter className="h-4 w-4 mr-1.5" />
+          Filter
+          {filtersOpen ? <ChevronUp className="h-4 w-4 ml-1.5" /> : <ChevronDown className="h-4 w-4 ml-1.5" />}
+        </button>
       </div>
 
       {filtersOpen && (
@@ -573,77 +564,6 @@ const AdminLeads = () => {
           </div>
         </div>
       )}
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div
-          className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center space-x-4 cursor-pointer hover:bg-blue-100 transition duration-150 ease-in-out"
-          onClick={() => {
-            setStatusFilter('all');
-            setBdaFilter('all');
-            setFollowUpFilter('all');
-            setCurrentPage(1);
-          }}
-        >
-          <div className="p-2 rounded-full bg-blue-100">
-            <Clock className="h-6 w-6 text-blue-600" />
-          </div>
-          <div>
-            <div className="text-sm font-medium text-blue-800">All Leads</div>
-            <div className="text-2xl font-semibold text-blue-900">{leads.length}</div>
-          </div>
-        </div>
-        <div
-          className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-center space-x-4 cursor-pointer hover:bg-amber-100 transition duration-150 ease-in-out"
-          onClick={() => {
-            setStatusFilter('all');
-            setBdaFilter('all');
-            setFollowUpFilter('today');
-            setCurrentPage(1);
-          }}
-        >
-          <div className="p-2 rounded-full bg-amber-100">
-            <Clock className="h-6 w-6 text-amber-600" />
-          </div>
-          <div>
-            <div className="text-sm font-medium text-amber-800">Today's Follow-ups</div>
-            <div className="text-2xl font-semibold text-amber-900">{todayFollowupsCount}</div>
-          </div>
-        </div>
-        <div
-          className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center space-x-4 cursor-pointer hover:bg-red-100 transition duration-150 ease-in-out"
-          onClick={() => {
-            setStatusFilter('all');
-            setBdaFilter('all');
-            setFollowUpFilter('overdue');
-            setCurrentPage(1);
-          }}
-        >
-          <div className="p-2 rounded-full bg-red-100">
-            <Clock className="h-6 w-6 text-red-600" />
-          </div>
-          <div>
-            <div className="text-sm font-medium text-red-800">Overdue Follow-ups</div>
-            <div className="text-2xl font-semibold text-red-900">{overdueFollowupsCount}</div>
-          </div>
-        </div>
-        {/* New Leads Card */}
-        <div
-          className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center space-x-4 cursor-pointer hover:bg-green-100 transition duration-150 ease-in-out"
-          onClick={() => {
-            setStatusFilter('new');
-            setBdaFilter('all');
-            setFollowUpFilter('all');
-          }}
-        >
-          <div className="p-2 rounded-full bg-green-100">
-            <UserPlus className="h-6 w-6 text-green-600" />
-          </div>
-          <div>
-            <div className="text-sm font-medium text-green-800">New Leads</div>
-            <div className="text-2xl font-semibold text-green-900">{useMemo(() => leads.filter(lead => lead.status === 'new').length, [leads])}</div>
-          </div>
-        </div>
-      </div>
 
       {isLoading && <div className="text-center py-4">Loading...</div>}
 
@@ -829,6 +749,7 @@ const AdminLeads = () => {
             </table>
           </div>
 
+          {/* Pagination controls */}
           {totalPages > 1 && (
             <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between">
               <div className="flex-1 flex justify-between sm:hidden">
@@ -964,6 +885,7 @@ const AdminLeads = () => {
                     actionTaken: lead.actionTaken || null,
                     createdAt: lead.createdAt || new Date().toISOString(),
                     updatedAt: lead.lastUpdated || new Date().toISOString(),
+                    lastUpdated: lead.lastUpdated || new Date().toISOString(),
                   }))
                 : [];
 

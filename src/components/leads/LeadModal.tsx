@@ -15,14 +15,14 @@ interface LeadModalProps {
 }
 
 const LeadModal: React.FC<LeadModalProps> = ({ isOpen, onClose, lead, onSave, readOnly = false }) => {
-  const [formData, setFormData] = useState<Lead>(lead);
+  const [formData, setFormData] = useState<Lead>({ ...lead });
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     console.log('LeadModal opened', { isOpen, readOnly, user, leadId: lead.id });
-    setFormData(lead);
+    setFormData({ ...lead });
     setError(null);
     if (isOpen && user === null) {
       toast.error('No authenticated user detected. Please log in.');
@@ -32,10 +32,10 @@ const LeadModal: React.FC<LeadModalProps> = ({ isOpen, onClose, lead, onSave, re
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
-    const { name, value } = e.target;
+    const { name, value, type } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: value
+      [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value || null,
     }));
   };
 
@@ -63,20 +63,55 @@ const LeadModal: React.FC<LeadModalProps> = ({ isOpen, onClose, lead, onSave, re
     }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setIsSubmitting(true);
+
+    console.log('handleSubmit start:', { user, userId: user?.id });
+
+    // Log state immediately before the authentication check
+    console.log('Before auth check in handleSubmit:', { user, userId: user?.id, typeOfUser: typeof user, userIdIsNull: user?.id == null });
+
+    // Refine authentication check to ensure user is object and id is not null
+    if (!user || typeof user !== 'object' || user.id == null) {
+      setError('User information missing. Please log in again.');
+      toast.error('Authentication error. Please log in again.');
+      // Consider adding console.error here to log why the check failed
+      console.error('Auth check failed:', { user, userId: user?.id, typeOfUser: typeof user, userIdIsNull: user?.id == null });
+      return;
+    }
+
     try {
-      const success = await onSave(formData);
+      const actionTaken = [
+        formData.whatsappSent ? 'whatsapp' : null,
+        formData.emailSent ? 'email' : null,
+        formData.quotationSent ? 'quotation' : null,
+        formData.sampleWorkSent ? 'sample' : null,
+        formData.MeetingBooked ? 'MeetingBooked' : null,
+        formData.DemoScheduled ? 'DemoScheduled' : null,
+        formData.NeedMoreInfo ? 'NeedMoreInfo' : null,
+        formData.WaitingForDecision ? 'WaitingForDecision' : null,
+      ]
+        .filter(Boolean)
+        .join(', ') || null;
+
+      const updatedLead = { ...formData, actionTaken, loggedinId: Number(user.id) };
+      console.log('Submitting lead:', updatedLead);
+
+      setIsSaving(true);
+      const success = await onSave(updatedLead);
       if (success) {
+        toast.success('Lead updated successfully');
         onClose();
+      } else {
+        setError('Failed to save lead. Please try again.');
+        toast.error('Lead update failed');
       }
-    } catch (error) {
-      console.error('Error saving lead:', error);
+    } catch (err) {
+      console.error('Submission error:', err);
       setError('An error occurred while saving the lead.');
       toast.error('Failed to save lead');
     } finally {
-      setIsSubmitting(false);
+      setIsSaving(false);
     }
   };
 
@@ -104,7 +139,7 @@ const LeadModal: React.FC<LeadModalProps> = ({ isOpen, onClose, lead, onSave, re
           <Dialog.Panel className="bg-white rounded-2xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-200">
             <div className="flex justify-between items-center mb-6">
               <Dialog.Title as="h2" className="text-2xl font-bold text-gray-900">
-                {readOnly ? 'View Lead' : 'Edit Lead'}
+                Lead Details
               </Dialog.Title>
               <button onClick={handleCancel} className="text-gray-400 hover:text-gray-600">
                 <X className="h-6 w-6" />
@@ -330,18 +365,18 @@ const LeadModal: React.FC<LeadModalProps> = ({ isOpen, onClose, lead, onSave, re
                 >
                   Cancel
                 </button>
-                {/* Save button - Always visible, disabled based on user and isSubmitting */}
+                {/* Save button - Always visible, disabled based on user and isSaving */}
                 {/* Removed !readOnly condition to always show save button */}
                 <button
                   type="submit"
-                  disabled={!user || user.id == null || isSubmitting} // Disabled if no user, no user.id, or currently submitting
+                  disabled={!user || user.id == null || isSaving} // Disabled if no user, no user.id, or currently saving
                   className={`px-4 py-2 text-sm font-medium text-white rounded-md ${
-                    !user || user.id == null || isSubmitting
+                    !user || user.id == null || isSaving
                       ? 'bg-gray-400 cursor-not-allowed'
                       : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700'
                   }`}
                 >
-                  {isSubmitting ? 'Saving...' : 'Save'}
+                  {isSaving ? 'Saving...' : 'Save'}
                 </button>
               </div>
             </form>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   ArrowUpDown,
   Search,
@@ -10,9 +10,13 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  Users,
+  Calendar,
   Clock,
+  Star,
+  XCircle,
 } from 'lucide-react';
-import { format, parseISO, isValid, isToday, isBefore } from 'date-fns';
+import { format, parseISO, isValid } from 'date-fns';
 import { toast } from 'react-hot-toast';
 import Papa from 'papaparse';
 import LeadModal from '../../components/leads/LeadModal';
@@ -36,13 +40,13 @@ const BdaLeads = () => {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<LeadStatus | 'all'>('all');
   const [bdaFilter, setBdaFilter] = useState<string>('all');
-  const [followUpFilter, setFollowUpFilter] = useState<'all' | 'today' | 'overdue'>('all');
   const [isAssigningLeads, setIsAssigningLeads] = useState(false);
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
   const [selectedBdaForAssignment, setSelectedBdaForAssignment] = useState<string>('');
   const [bdaUsers, setBdaUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [bdaFetchError, setBdaFetchError] = useState<string | null>(null);
+  const [activeCardFilter, setActiveCardFilter] = useState<'all' | 'today' | 'overdue' | 'new'>('all');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -85,16 +89,23 @@ const BdaLeads = () => {
               city: lead.city || null,
               state: lead.state || null,
               status: (lead.status || 'new') as LeadStatus,
-              assignedTo: lead.assignedTo || null,
+              assignedBdaId: lead.assignedBdaId ? String(lead.assignedBdaId) : null,
+              assignedBdaName: lead.assignedTo || null,
               followUpDate: lead.followUp || null,
-              temperature: lead.temperature || null,
-              interests: lead.interests || null,
+              intrests: lead.intrests || null,
               remarks: lead.remarks || null,
               actionStatus: lead.actionStatus || null,
               actionTaken: lead.actionTaken || null,
               createdAt: (typeof lead.createdAt === 'string' && lead.createdAt) ? lead.createdAt : new Date().toISOString(),
               updatedAt: (typeof lead.lastUpdated === 'string' && lead.lastUpdated) ? lead.lastUpdated : new Date().toISOString(),
-              lastUpdated: (typeof lead.lastUpdated === 'string' && lead.lastUpdated) ? lead.lastUpdated : new Date().toISOString(),
+              whatsappSent: lead.actionTaken?.includes('whatsapp') || false,
+              emailSent: lead.actionTaken?.includes('email') || false,
+              quotationSent: lead.actionTaken?.includes('quotation') || false,
+              sampleWorkSent: lead.actionTaken?.includes('sample') || false,
+              MeetingBooked: lead.actionTaken?.includes('MeetingBooked') || false,
+              DemoScheduled: lead.actionTaken?.includes('DemoScheduled') || false,
+              NeedMoreInfo: lead.actionTaken?.includes('NeedMoreInfo') || false,
+              WaitingForDecision: lead.actionTaken?.includes('WaitingForDecision') || false,
             }))
           : [];
 
@@ -141,6 +152,17 @@ const BdaLeads = () => {
     }
   };
 
+  // Calculate counts for the filter cards
+  const today = format(new Date(), 'yyyy-MM-dd');
+  const allLeadsCount = leads.length;
+  const todaysFollowUpsCount = leads.filter(lead => 
+    lead.followUpDate && format(new Date(lead.followUpDate), 'yyyy-MM-dd') === today
+  ).length;
+  const overdueFollowUpsCount = leads.filter(lead => 
+    lead.followUpDate && new Date(lead.followUpDate) < new Date() && format(new Date(lead.followUpDate), 'yyyy-MM-dd') !== today
+  ).length;
+  const newLeadsCount = leads.filter(lead => lead.status === 'new').length;
+
   const toggleLeadSelection = (leadId: string) => {
     setSelectedLeads(prev => {
       const newSelection = new Set(prev);
@@ -159,8 +181,28 @@ const BdaLeads = () => {
     }
   };
 
+  const handleClearFilters = () => {
+    setActiveCardFilter('all');
+    setSearchTerm('');
+    setStatusFilter('all');
+    setBdaFilter('all');
+    setFiltersOpen(false);
+  };
+
   const filteredLeads = leads
     .filter(lead => {
+      // Apply card filter
+      let matchesCardFilter = true;
+      if (activeCardFilter === 'today') {
+        matchesCardFilter = lead.followUpDate && format(new Date(lead.followUpDate), 'yyyy-MM-dd') === today;
+      } else if (activeCardFilter === 'overdue') {
+        matchesCardFilter = lead.followUpDate && new Date(lead.followUpDate) < new Date() && format(new Date(lead.followUpDate), 'yyyy-MM-dd') !== today;
+      } else if (activeCardFilter === 'new') {
+        matchesCardFilter = lead.status === 'new';
+      } else {
+        matchesCardFilter = true; // 'all' filter shows all leads
+      }
+
       const matchesSearch =
         (lead.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (lead.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -168,19 +210,8 @@ const BdaLeads = () => {
       const matchesStatus = statusFilter === 'all' || lead.status === statusFilter;
       const matchesBda =
         bdaFilter === 'all' ||
-        (bdaFilter === 'unassigned' ? !lead.assignedTo : lead.assignedTo === bdaFilter);
-      const matchesFollowUp =
-        followUpFilter === 'all' ||
-        (followUpFilter === 'today' &&
-          lead.followUpDate &&
-          isValid(parseISO(lead.followUpDate)) &&
-          isToday(parseISO(lead.followUpDate))) ||
-        (followUpFilter === 'overdue' &&
-          lead.followUpDate &&
-          isValid(parseISO(lead.followUpDate)) &&
-          isBefore(parseISO(lead.followUpDate), new Date()) &&
-          !isToday(parseISO(lead.followUpDate)));
-      return matchesSearch && matchesStatus && matchesBda && matchesFollowUp;
+        (bdaFilter === 'unassigned' ? !lead.assignedBdaId : lead.assignedBdaId === bdaFilter);
+      return matchesCardFilter && matchesSearch && matchesStatus && matchesBda;
     })
     .sort((a, b) => {
       // First sort by status using the predefined order
@@ -194,79 +225,17 @@ const BdaLeads = () => {
       // If status is the same, sort by lastUpdated within the status group
       const dateA = new Date(a.lastUpdated || a.updatedAt || '').getTime();
       const dateB = new Date(b.lastUpdated || b.updatedAt || '').getTime();
+      console.log(`Comparing dates for ${a.name} (${a.status}): ${dateA} vs ${b.name} (${b.status}): ${dateB}`);
       return dateA - dateB; // Ascending order for dates within status group
     });
-
-  const totalLeadsCount = filteredLeads.length;
-
-  const todayFollowupsCount = useMemo(() => {
-    return leads.filter(lead => 
-      lead.followUpDate && isValid(parseISO(lead.followUpDate)) && isToday(parseISO(lead.followUpDate))
-    ).length;
-  }, [leads]);
-
-  const overdueFollowupsCount = useMemo(() => {
-    return leads.filter(lead => 
-      lead.followUpDate && isValid(parseISO(lead.followUpDate)) && isBefore(parseISO(lead.followUpDate), new Date()) && !isToday(parseISO(lead.followUpDate))
-    ).length;
-  }, [leads]);
-
-  const closedDealsCount = useMemo(() => {
-    return filteredLeads.filter(lead => lead.status === 'closed_won').length;
-  }, [filteredLeads]);
 
   const handleOpenLeadModal = (lead: Lead) => {
     setSelectedLead({
       ...lead,
       createdAt: lead.createdAt || new Date().toISOString(),
       updatedAt: lead.updatedAt || new Date().toISOString(),
-      lastUpdated: lead.lastUpdated || new Date().toISOString(),
     });
     setIsModalOpen(true);
-  };
-
-  const handleSaveLead = async (updatedLead: Lead): Promise<boolean> => {
-    console.log('Attempting to save lead:', updatedLead);
-    setIsLoading(true);
-    let success = false;
-    try {
-      const payload = {
-        ...updatedLead,
-        id: parseInt(updatedLead.id),
-        loggedinId: user?.id ? parseInt(user.id) : undefined,
-      };
-      console.log('Saving lead with payload:', payload);
-      
-      const response = await fetch(`http://localhost:8080/api/leads/update/${payload.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to save lead: ${response.status} - ${errorText}`);
-      }
-
-      const result = await response.json();
-      console.log('Save lead response:', result);
-      toast.success('Lead updated successfully');
-      
-      setLeads(prevLeads =>
-        prevLeads.map(lead => (lead.id === updatedLead.id ? result : lead))
-      );
-
-      success = true;
-    } catch (error) {
-      console.error('Error saving lead:', error);
-      toast.error(`Failed to save lead: ${error instanceof Error ? error.message : String(error)}`);
-      success = false;
-    } finally {
-      setIsLoading(false);
-    }
-    return success;
   };
 
   const handleAssignLeads = async () => {
@@ -300,10 +269,12 @@ const BdaLeads = () => {
           const updatedLead = selectedLeads.has(lead.id)
             ? {
                 ...lead,
-                assignedTo: selectedBda.name,
+                assignedBdaId: selectedBda.id,
+                assignedBdaName: selectedBda.name,
                 updatedAt: new Date().toISOString(),
               }
             : lead;
+          // Ensure createdAt and updatedAt are strings for the new state
           return {
             ...updatedLead,
             createdAt: typeof updatedLead.createdAt === 'string' ? updatedLead.createdAt : new Date().toISOString(),
@@ -358,16 +329,23 @@ const BdaLeads = () => {
             city: lead.city || null,
             state: lead.state || null,
             status: (lead.status || 'new') as LeadStatus,
-            assignedTo: lead.assignedTo || null,
+            assignedBdaId: lead.assignedBdaId ? String(lead.assignedBdaId) : null,
+            assignedBdaName: lead.assignedTo || null,
             followUpDate: lead.followUp || null,
-            temperature: lead.temperature || null,
-            interests: lead.interests || null,
+            intrests: lead.intrests || null,
             remarks: lead.remarks || null,
             actionStatus: lead.actionStatus || null,
             actionTaken: lead.actionTaken || null,
             createdAt: (typeof lead.createdAt === 'string' && lead.createdAt) ? lead.createdAt : new Date().toISOString(),
             updatedAt: (typeof lead.lastUpdated === 'string' && lead.lastUpdated) ? lead.lastUpdated : new Date().toISOString(),
-            lastUpdated: (typeof lead.lastUpdated === 'string' && lead.lastUpdated) ? lead.lastUpdated : new Date().toISOString(),
+            whatsappSent: lead.actionTaken?.includes('whatsapp') || false,
+            emailSent: lead.actionTaken?.includes('email') || false,
+            quotationSent: lead.actionTaken?.includes('quotation') || false,
+            sampleWorkSent: lead.actionTaken?.includes('sample') || false,
+            MeetingBooked: lead.actionTaken?.includes('MeetingBooked') || false,
+            DemoScheduled: lead.actionTaken?.includes('DemoScheduled') || false,
+            NeedMoreInfo: lead.actionTaken?.includes('NeedMoreInfo') || false,
+            WaitingForDecision: lead.actionTaken?.includes('WaitingForDecision') || false,
           }))
         : [];
 
@@ -389,8 +367,8 @@ const BdaLeads = () => {
       Email: lead.email || '',
       Status: lead.status,
       ActionStatus: lead.actionStatus || '',
-      AssignedTo: lead.assignedTo || 'Unassigned',
-      Intrests: lead.interests || '',
+      AssignedTo: lead.assignedBdaName || 'Unassigned',
+      Intrests: lead.intrests || '',
       Remarks: lead.remarks || '',
       ActionTaken: lead.actionTaken || '',
       CompanyName: lead.companyName || '',
@@ -412,14 +390,6 @@ const BdaLeads = () => {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
     toast.success('Leads exported successfully');
-  };
-
-  const handleClearFilters = () => {
-    setStatusFilter('all');
-    setBdaFilter('all');
-    setFollowUpFilter('all');
-    setSearchTerm('');
-    setFiltersOpen(false);
   };
 
   return (
@@ -519,6 +489,74 @@ const BdaLeads = () => {
         </div>
       )}
 
+      {/* Filter Cards Section with Clickable Filters and Updated Icons */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div
+          onClick={() => setActiveCardFilter('all')}
+          className={`border rounded-lg p-4 flex items-center space-x-3 cursor-pointer transition-colors ${
+            activeCardFilter === 'all'
+              ? 'bg-blue-100 border-blue-300'
+              : 'bg-blue-50 border-blue-200 hover:bg-blue-100'
+          }`}
+        >
+          <div className="p-2 bg-blue-100 rounded-full">
+            <Users className="h-6 w-6 text-blue-600" />
+          </div>
+          <div>
+            <h3 className="text-sm font-medium text-blue-800">All Leads</h3>
+            <p className="text-2xl font-semibold text-blue-900">{allLeadsCount}</p>
+          </div>
+        </div>
+        <div
+          onClick={() => setActiveCardFilter('today')}
+          className={`border rounded-lg p-4 flex items-center space-x-3 cursor-pointer transition-colors ${
+            activeCardFilter === 'today'
+              ? 'bg-yellow-100 border-yellow-300'
+              : 'bg-yellow-50 border-yellow-200 hover:bg-yellow-100'
+          }`}
+        >
+          <div className="p-2 bg-yellow-100 rounded-full">
+            <Calendar className="h-6 w-6 text-yellow-600" />
+          </div>
+          <div>
+            <h3 className="text-sm font-medium text-yellow-800">Today's Follow-ups</h3>
+            <p className="text-2xl font-semibold text-yellow-900">{todaysFollowUpsCount}</p>
+          </div>
+        </div>
+        <div
+          onClick={() => setActiveCardFilter('overdue')}
+          className={`border rounded-lg p-4 flex items-center space-x-3 cursor-pointer transition-colors ${
+            activeCardFilter === 'overdue'
+              ? 'bg-red-100 border-red-300'
+              : 'bg-red-50 border-red-200 hover:bg-red-100'
+          }`}
+        >
+          <div className="p-2 bg-red-100 rounded-full">
+            <Clock className="h-6 w-6 text-red-600" />
+          </div>
+          <div>
+            <h3 className="text-sm font-medium text-red-800">Overdue Follow-ups</h3>
+            <p className="text-2xl font-semibold text-red-900">{overdueFollowUpsCount}</p>
+          </div>
+        </div>
+        <div
+          onClick={() => setActiveCardFilter('new')}
+          className={`border rounded-lg p-4 flex items-center space-x-3 cursor-pointer transition-colors ${
+            activeCardFilter === 'new'
+              ? 'bg-green-100 border-green-300'
+              : 'bg-green-50 border-green-200 hover:bg-green-100'
+          }`}
+        >
+          <div className="p-2 bg-green-100 rounded-full">
+            <Star className="h-6 w-6 text-green-600" />
+          </div>
+          <div>
+            <h3 className="text-sm font-medium text-green-800">New Leads</h3>
+            <p className="text-2xl font-semibold text-green-900">{newLeadsCount}</p>
+          </div>
+        </div>
+      </div>
+
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-4 sm:space-y-0">
         <div className="relative w-full sm:w-64">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -533,10 +571,10 @@ const BdaLeads = () => {
             disabled={isLoading}
           />
         </div>
-        <div className="flex space-x-2 w-full sm:w-auto">
+        <div className="flex space-x-2">
           <button
             onClick={() => setFiltersOpen(!filtersOpen)}
-            className="px-3 py-2 text-sm font-medium rounded-md bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 flex items-center w-full sm:w-auto justify-center disabled:opacity-50"
+            className="px-3 py-2 text-sm font-medium rounded-md bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 flex items-center sm:w-auto w-full justify-center disabled:opacity-50"
             disabled={isLoading}
           >
             <Filter className="h-4 w-4 mr-1.5" />
@@ -545,11 +583,11 @@ const BdaLeads = () => {
           </button>
           <button
             onClick={handleClearFilters}
-            className="px-3 py-2 text-sm font-medium rounded-md bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 flex items-center w-full sm:w-auto justify-center disabled:opacity-50"
+            className="px-3 py-2 text-sm font-medium rounded-md bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 flex items-center sm:w-auto w-full justify-center disabled:opacity-50"
             disabled={isLoading}
           >
-            <X className="h-4 w-4 mr-1.5" />
-            Clear Filters
+            <XCircle className="h-4 w-4 mr-1.5" />
+            Clear Filter
           </button>
         </div>
       </div>
@@ -607,78 +645,6 @@ const BdaLeads = () => {
         </div>
       )}
 
-      {/* Filter Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* All Leads Card */}
-        <div
-          className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center space-x-4 cursor-pointer hover:bg-blue-100 transition duration-150 ease-in-out"
-          onClick={() => {
-            setStatusFilter('all');
-            setBdaFilter('all');
-            setFollowUpFilter('all');
-          }}
-        >
-          <div className="p-2 rounded-full bg-blue-100">
-            <Clock className="h-6 w-6 text-blue-600" />
-          </div>
-          <div>
-            <div className="text-sm font-medium text-blue-800">All Leads</div>
-            <div className="text-2xl font-semibold text-blue-900">{leads.length}</div>
-          </div>
-        </div>
-        {/* Today's Follow-ups Card */}
-        <div
-          className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-center space-x-4 cursor-pointer hover:bg-amber-100 transition duration-150 ease-in-out"
-          onClick={() => {
-            setStatusFilter('all');
-            setBdaFilter('all');
-            setFollowUpFilter('today');
-          }}
-        >
-          <div className="p-2 rounded-full bg-amber-100">
-            <Clock className="h-6 w-6 text-amber-600" />
-          </div>
-          <div>
-            <div className="text-sm font-medium text-amber-800">Today's Follow-ups</div>
-            <div className="text-2xl font-semibold text-amber-900">{todayFollowupsCount}</div>
-          </div>
-        </div>
-        {/* Overdue Follow-ups Card */}
-        <div
-          className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center space-x-4 cursor-pointer hover:bg-red-100 transition duration-150 ease-in-out"
-          onClick={() => {
-            setStatusFilter('all');
-            setBdaFilter('all');
-            setFollowUpFilter('overdue');
-          }}
-        >
-          <div className="p-2 rounded-full bg-red-100">
-            <Clock className="h-6 w-6 text-red-600" />
-          </div>
-          <div>
-            <div className="text-sm font-medium text-red-800">Overdue Follow-ups</div>
-            <div className="text-2xl font-semibold text-red-900">{overdueFollowupsCount}</div>
-          </div>
-        </div>
-        {/* New Leads Card */}
-        <div
-          className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center space-x-4 cursor-pointer hover:bg-green-100 transition duration-150 ease-in-out"
-          onClick={() => {
-            setStatusFilter('new');
-            setBdaFilter('all');
-            setFollowUpFilter('all');
-          }}
-        >
-          <div className="p-2 rounded-full bg-green-100">
-            <UserPlus className="h-6 w-6 text-green-600" />
-          </div>
-          <div>
-            <div className="text-sm font-medium text-green-800">New Leads</div>
-            <div className="text-2xl font-semibold text-green-900">{useMemo(() => leads.filter(lead => lead.status === 'new').length, [leads])}</div>
-          </div>
-        </div>
-      </div>
-
       {isLoading && <div className="text-center py-4">Loading...</div>}
 
       {!isLoading && (
@@ -706,15 +672,14 @@ const BdaLeads = () => {
                       />
                     </th>
                   )}
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer"
-                    onClick={() => handleSort('name')}
-                  >
-                    <div className="flex items-center">
+                 <th
+                  scope="col"
+                  className="uppercase tracking-wider cursor-pointer"
+                  onClick={() => handleSort('name')}
+                          >
                       Name
                       <ArrowUpDown className="h-4 w-4 ml-1" />
-                    </div>
+                    
                   </th>
                   <th
                     scope="col"
@@ -735,7 +700,7 @@ const BdaLeads = () => {
                   <th
                     scope="col"
                     className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer"
-                    onClick={() => handleSort('assignedTo')}
+                    onClick={() => handleSort('assignedBdaName')}
                   >
                     <div className="flex items-center">
                       Assigned To
@@ -843,7 +808,7 @@ const BdaLeads = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{lead.assignedTo || 'Unassigned'}</div>
+                        <div className="text-sm text-gray-900">{lead.assignedBdaName || 'Unassigned'}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {lead.followUpDate && isValidDate(lead.followUpDate) ? (
@@ -891,7 +856,97 @@ const BdaLeads = () => {
             setSelectedLead(null);
           }}
           lead={selectedLead}
-          onSave={handleSaveLead}
+          onSave={async (updatedLead: Lead) => {
+            try {
+              if (!user || user.id == null) {
+                toast.error('User authentication required.');
+                console.error('Auth user missing:', user);
+                return false;
+              }
+
+              const payload = {
+                name: updatedLead.name ?? "",
+                contactNo: updatedLead.phone ?? "",
+                email: updatedLead.email ?? "",
+                status: updatedLead.status ?? "",
+                actionStatus: updatedLead.actionStatus ?? "",
+                assignedTo: updatedLead.assignedBdaName ?? "",
+                intrests: updatedLead.intrests ?? "",
+                remarks: updatedLead.remarks ?? "",
+                actionTaken: updatedLead.actionTaken ?? "",
+                followUp: updatedLead.followUpDate ?? "",
+                loggedinId: Number(user.id),
+                companyName: updatedLead.companyName ?? "",
+                industry: updatedLead.industry ?? "",
+                city: updatedLead.city ?? "",
+                state: updatedLead.state ?? "",
+                lastUpdated: new Date().toISOString()
+              };
+
+              const response = await fetch(`http://localhost:8080/api/leads/update/${updatedLead.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+              });
+
+              if (!response.ok) {
+                const errorText = await response.text();
+                console.error('Backend error:', errorText);
+                toast.error(`Failed to update lead: ${errorText}`);
+                return false;
+              }
+
+              const leadsResponse = await fetch('http://localhost:8080/api/leads/getall');
+              if (!leadsResponse.ok) {
+                console.error('Failed to fetch leads:', leadsResponse.status);
+                toast.error('Failed to refresh leads');
+                return false;
+              }
+
+              const rawLeads = await leadsResponse.json();
+              const updatedLeads: Lead[] = Array.isArray(rawLeads)
+                ? rawLeads.map((lead: any) => ({
+                    id: String(lead.id),
+                    name: lead.name || null,
+                    phone: lead.contactNo || null,
+                    email: lead.email || null,
+                    industry: lead.industry || null,
+                    companyName: lead.companyName || null,
+                    city: lead.city || null,
+                    state: lead.state || null,
+                    status: (lead.status || 'new') as LeadStatus,
+                    assignedBdaId: lead.assignedBdaId ? String(lead.assignedBdaId) : null,
+                    assignedBdaName: lead.assignedTo || null,
+                    followUpDate: lead.followUp || null,
+                    intrests: lead.intrests || null,
+                    remarks: lead.remarks || null,
+                    actionStatus: lead.actionStatus || null,
+                    actionTaken: lead.actionTaken || null,
+                    createdAt: (typeof lead.createdAt === 'string' && lead.createdAt) ? lead.createdAt : new Date().toISOString(),
+                    updatedAt: (typeof lead.lastUpdated === 'string' && lead.lastUpdated) ? lead.lastUpdated : new Date().toISOString(),
+                    lastUpdated: (typeof lead.lastUpdated === 'string' && lead.lastUpdated) ? lead.lastUpdated : new Date().toISOString(),
+                    whatsappSent: lead.actionTaken?.includes('whatsapp') || false,
+                    emailSent: lead.actionTaken?.includes('email') || false,
+                    quotationSent: lead.actionTaken?.includes('quotation') || false,
+                    sampleWorkSent: lead.actionTaken?.includes('sample') || false,
+                    MeetingBooked: lead.actionTaken?.includes('MeetingBooked') || false,
+                    DemoScheduled: lead.actionTaken?.includes('DemoScheduled') || false,
+                    NeedMoreInfo: lead.actionTaken?.includes('NeedMoreInfo') || false,
+                    WaitingForDecision: lead.actionTaken?.includes('WaitingForDecision') || false,
+                  }))
+                : [];
+
+              setLeads(updatedLeads);
+              setIsModalOpen(false);
+              setSelectedLead(null);
+              toast.success('Lead updated successfully');
+              return true;
+            } catch (err) {
+              console.error('Error updating lead:', err);
+              toast.error('Failed to update lead');
+              return false;
+            }
+          }}
           readOnly={false}
         />
       )}

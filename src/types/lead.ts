@@ -24,20 +24,23 @@ export interface Lead {
   city: string | null;
   state: string | null;
   status: LeadStatus;
-  assignedTo: string | null;
   assignedBdaId: string | null;
   assignedBdaName: string | null;
   followUpDate: string | null;
-  temperature: string | null;
-  interests: string | null;
+  intrests: string | null;
   remarks: string | null;
   actionStatus: string | null;
   actionTaken: string | null;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: string; // Required string
+  updatedAt: string; // Required string
   lastUpdated?: string;
   loggedinId?: number;
-  severity?: string;
-  service?: string | null;
-  type?: string | null;
+  whatsappSent?: boolean;
+  emailSent?: boolean;
+  quotationSent?: boolean;
+  sampleWorkSent?: boolean;
+  MeetingBooked?: boolean;
+  DemoScheduled?: boolean;
+  NeedMoreInfo?: boolean;
+  WaitingForDecision?: boolean;
 } 

@@ -2,90 +2,25 @@ import { useState, useEffect } from 'react';
 import { DayPicker } from 'react-day-picker';
 import { format, isToday, isSameDay, isSameMonth, isBefore, parseISO } from 'date-fns';
 import { CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
+import { generateCalendarEvents, mockLeads } from '../../data/mockData';
 import LeadModal from '../../components/leads/LeadModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'react-hot-toast';
 import 'react-day-picker/dist/style.css';
 import { Lead } from '../../types';
 
-interface CalendarEvent {
-  id: string;
-  title: string;
-  date: Date;
-  status: 'overdue' | 'today' | 'upcoming';
-  leadId: string;
-}
-
 const BdaCalendar = () => {
   const { user } = useAuth();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
-  const [leads, setLeads] = useState<Lead[]>([]);
+  const [calendarEvents, setCalendarEvents] = useState(generateCalendarEvents(user?.id));
+  const [leads, setLeads] = useState(mockLeads.filter(lead => lead.assignedBdaId === user?.id));
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   
-  // Fetch leads from API
+  // Update events when leads change
   useEffect(() => {
-    const fetchLeads = async () => {
-      try {
-        setIsLoading(true);
-        const response = await fetch('http://localhost:8080/api/leads/getall');
-        if (!response.ok) throw new Error('Failed to fetch leads');
-        
-        const data = await response.json();
-        const bdaLeads = data.filter((lead: Lead) => 
-          lead.assignedTo?.toLowerCase() === user?.name.toLowerCase() ||
-          lead.assignedTo?.toString() === user?.id.toString()
-        );
-        
-        setLeads(bdaLeads);
-        
-        // Generate calendar events from actual leads
-        const events = bdaLeads
-          .filter(lead => lead.followUpDate)
-          .map(lead => {
-            const followUpDate = lead.followUpDate ? new Date(lead.followUpDate) : null;
-            if (!followUpDate) return null;
-            
-            const now = new Date();
-            
-            // Determine status based on date
-            let status: 'overdue' | 'today' | 'upcoming';
-            if (followUpDate < now && !isToday(followUpDate)) {
-              status = 'overdue';
-            } else if (isToday(followUpDate)) {
-              status = 'today';
-            } else {
-              status = 'upcoming';
-            }
-            
-            return {
-              id: lead.id.toString(),
-              title: lead.name || 'Unknown Lead',
-              date: followUpDate,
-              status,
-              leadId: lead.id.toString(),
-            };
-          })
-          .filter((event): event is NonNullable<typeof event> => event !== null);
-        
-        setCalendarEvents(events);
-        setError(null);
-      } catch (err) {
-        console.error('Error fetching leads:', err);
-        setError('Failed to fetch leads. Please try again later.');
-        setLeads([]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    if (user) {
-      fetchLeads();
-    }
-  }, [user]);
+    setCalendarEvents(generateCalendarEvents(user?.id));
+  }, [leads, user?.id]);
   
   // Get events for selected date
   const getEventsForSelectedDate = () => {
@@ -142,22 +77,6 @@ const BdaCalendar = () => {
       </div>
     );
   };
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-slate-500">Loading calendar data...</div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="bg-red-100 text-red-800 px-4 py-2 rounded-lg">
-        {error}
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -308,10 +227,35 @@ const BdaCalendar = () => {
                           </div>
                         </div>
                       </div>
-                      <div className="text-xs text-slate-500">
-                        {format(event.date, 'h:mm a')}
+                      
+                      <div className="flex flex-col items-end">
+                        <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+                          event.status === 'overdue' ? 'bg-red-100 text-red-800' :
+                          event.status === 'today' ? 'bg-amber-100 text-amber-800' :
+                          'bg-green-100 text-green-800'
+                        }`}>
+                          {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
+                        </span>
+                        
+                        <span className={`text-xs mt-1 ${
+                          lead.status === 'new' ? 'text-slate-600' :
+                          lead.status === 'contacted' ? 'text-blue-600' :
+                          lead.status === 'qualified' ? 'text-purple-600' :
+                          lead.status === 'proposal' ? 'text-amber-600' :
+                          lead.status === 'negotiation' ? 'text-orange-600' :
+                          lead.status === 'closed_won' ? 'text-green-600' :
+                          'text-red-600'
+                        }`}>
+                          {lead.status.charAt(0).toUpperCase() + lead.status.slice(1).replace('_', ' ')}
+                        </span>
                       </div>
                     </div>
+                    
+                    {lead.remarks && (
+                      <div className="mt-2 text-sm text-slate-600 pl-6 border-l-2 border-slate-200">
+                        {lead.remarks.length > 100 ? lead.remarks.substring(0, 100) + '...' : lead.remarks}
+                      </div>
+                    )}
                   </div>
                 );
               })
@@ -320,6 +264,7 @@ const BdaCalendar = () => {
         </div>
       </div>
       
+      {/* Lead Modal */}
       {selectedLead && (
         <LeadModal
           isOpen={isModalOpen}
