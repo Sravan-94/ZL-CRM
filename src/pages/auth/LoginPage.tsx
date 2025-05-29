@@ -9,7 +9,6 @@ const LoginPage = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
@@ -44,78 +43,59 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
-      <div className="bg-white p-8 rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-200 w-full max-w-sm">
-        <h2 className="text-center text-lg font-semibold mb-6 uppercase text-gray-700">Sign In To Your Account</h2>
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
+      <form
+        className="space-y-6 w-full max-w-sm"
+        onSubmit={handleSubmit}
+      >
+        <h2 className="text-xl font-semibold text-center">Sign in to your account</h2>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="email" className="sr-only">Email address</label>
+        <div>
+          <label htmlFor="email" className="block text-sm font-medium text-slate-700">
+            Email address
+          </label>
+          <input
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm sm:text-sm"
+            placeholder="Enter your email"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="password" className="block text-sm font-medium text-slate-700">
+            Password
+          </label>
+          <div className="relative mt-1">
             <input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              required
-              className="w-full px-4 py-2 rounded-md bg-gray-100 placeholder-gray-500 text-sm focus:outline-none focus:ring-0 border-none"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Email address"
+              id="password"
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm sm:text-sm"
+              placeholder="Enter your password"
             />
-          </div>
-
-          <div>
-            <label htmlFor="password" className="sr-only">Password</label>
-            <div className="relative">
-              <input
-                id="password"
-                name="password"
-                type={showPassword ? 'text' : 'password'}
-                autoComplete="current-password"
-                required
-                className="w-full px-4 py-2 rounded-md bg-gray-100 placeholder-gray-500 text-sm focus:outline-none focus:ring-0 border-none"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Password"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-sm leading-5 text-gray-500 hover:text-gray-700 focus:outline-none"
-              >
-                {showPassword ? 'Hide' : 'Show'}
-              </button>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between text-sm">
-            <div className="flex items-center">
-              <input
-                id="remember-me"
-                name="remember-me"
-                type="checkbox"
-                className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-              />
-              <label htmlFor="remember-me" className="ml-2 block text-gray-900">
-                Keep me signed in
-              </label>
-            </div>
-          </div>
-
-          <div>
             <button
-              type="submit"
-              disabled={isLoading}
-              className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white 
-                ${isLoading ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute inset-y-0 right-2 flex items-center text-sm text-blue-600 focus:outline-none"
             >
-              {isLoading ? 'Signing In...' : 'Sign in'}
+              {showPassword ? 'Hide' : 'Show'}
             </button>
           </div>
-        </form>
-      </div>
+        </div>
+
+        <button
+          type="submit"
+          disabled={isLoading}
+          className={`w-full py-2 px-4 rounded-md text-sm font-medium text-white 
+            ${isLoading ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'} transition-colors`}
+        >
+          {isLoading ? 'Logging in...' : 'Sign in'}
+        </button>
+      </form>
     </div>
   );
 };
