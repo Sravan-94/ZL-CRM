@@ -74,7 +74,7 @@ const BdaLeads = () => {
     const fetchData = async () => {
       setIsLoading(true);
       try {
-        const leadsResponse = await fetch('http://localhost:8080/api/leads/getall');
+        const leadsResponse = await fetch('https://crmbackend-lxbe.onrender.com/api/leads/getall');
         if (!leadsResponse.ok) throw new Error(`Failed to fetch leads: ${leadsResponse.status}`);
         const rawLeadsData = await leadsResponse.json();
 
@@ -111,7 +111,7 @@ const BdaLeads = () => {
 
         if (isMounted) setLeads(leadsData);
 
-        const usersResponse = await fetch('http://localhost:8080/api/bda-users');
+        const usersResponse = await fetch('https://crmbackend-lxbe.onrender.com/api/bda-users');
         if (!usersResponse.ok) throw new Error(`Failed to fetch BDAs: ${usersResponse.status}`);
         const usersData = await usersResponse.json();
 
@@ -252,7 +252,7 @@ const BdaLeads = () => {
 
     setIsLoading(true);
     try {
-      const response = await fetch('http://localhost:8080/api/leads/assign', {
+      const response = await fetch('https://crmbackend-lxbe.onrender.com/api/leads/assign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -304,7 +304,7 @@ const BdaLeads = () => {
 
     setIsLoading(true);
     try {
-      const response = await fetch('http://localhost:8080/api/leads/upload', {
+      const response = await fetch('https://crmbackend-lxbe.onrender.com/api/leads/upload', {
         method: 'POST',
         body: formData,
       });
@@ -314,7 +314,7 @@ const BdaLeads = () => {
       const message = await response.text();
       toast.success(message);
 
-      const leadsResponse = await fetch('http://localhost:8080/api/leads/getall');
+      const leadsResponse = await fetch('https://crmbackend-lxbe.onrender.com/api/leads/getall');
       if (!leadsResponse.ok) throw new Error('Failed to fetch updated leads');
       const rawLeadsData = await leadsResponse.json();
 
@@ -883,7 +883,7 @@ const BdaLeads = () => {
                 lastUpdated: new Date().toISOString()
               };
 
-              const response = await fetch(`http://localhost:8080/api/leads/update/${updatedLead.id}`, {
+              const response = await fetch(`https://crmbackend-lxbe.onrender.com/api/leads/update/${updatedLead.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
@@ -896,7 +896,7 @@ const BdaLeads = () => {
                 return false;
               }
 
-              const leadsResponse = await fetch('http://localhost:8080/api/leads/getall');
+              const leadsResponse = await fetch('https://crmbackend-lxbe.onrender.com/api/leads/getall');
               if (!leadsResponse.ok) {
                 console.error('Failed to fetch leads:', leadsResponse.status);
                 toast.error('Failed to refresh leads');

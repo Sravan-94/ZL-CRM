@@ -30,7 +30,7 @@ const BdaDashboard = () => {
   useEffect(() => {
     if (user) {
       console.log('Logged-in user:', { id: user.id, name: user.name }); // Debug user object
-      fetch('http://localhost:8080/api/leads/getall')
+      fetch('https://crmbackend-lxbe.onrender.com/api/leads/getall')
         .then((response) => {
           if (!response.ok) {
             throw new Error(`HTTP error! Status: ${response.status}`);

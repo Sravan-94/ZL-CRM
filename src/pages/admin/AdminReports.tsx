@@ -80,7 +80,7 @@ const AdminReports = () => {
       try {
         setIsLoading(true);
         // Fetch leads
-        const leadsResponse = await fetch('http://localhost:8080/api/leads/getall');
+        const leadsResponse = await fetch('https://crmbackend-lxbe.onrender.com/api/leads/getall');
         if (!leadsResponse.ok) throw new Error(`Failed to fetch leads: ${leadsResponse.status}`);
         const leadsData = await leadsResponse.json();
         
@@ -110,7 +110,7 @@ const AdminReports = () => {
         setLeads(mappedLeads);
 
         // Fetch users
-        const usersResponse = await fetch('http://localhost:8080/api/bda-users');
+        const usersResponse = await fetch('https://crmbackend-lxbe.onrender.com/api/bda-users');
         if (!usersResponse.ok) throw new Error(`Failed to fetch users: ${usersResponse.status}`);
         const usersData = await usersResponse.json();
         setUsers(usersData);
