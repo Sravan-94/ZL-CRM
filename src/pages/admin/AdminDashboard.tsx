@@ -24,6 +24,7 @@ interface Lead {
   createdAt: string;
   updatedAt: string;
   assignedTo?: string;
+  lastUpdated?: string;
 }
 
 interface User {
@@ -107,15 +108,53 @@ const AdminDashboard = () => {
     }));
   }, [metrics.leadsByStatus]);
 
-  // Get recent leads using useMemo
-  const recentLeads = useMemo(() => {
-    return [...leads]
+  // Helper function to determine the last action taken on a lead
+  const determineLastAction = (lead: Lead) => {
+    if (lead.actionTaken?.includes('quotation')) return 'Sent quotation';
+    if (lead.actionTaken?.includes('sample')) return 'Sent sample work';
+    if (lead.actionTaken?.includes('email')) return 'Sent email';
+    if (lead.actionTaken?.includes('whatsapp')) return 'Sent WhatsApp message';
+    return lead.actionTaken || 'Updated lead status';
+  };
+
+  // Get recent activities using useMemo
+  const recentActivities = useMemo(() => {
+    console.log('All leads:', leads); // Debug log to see all leads
+
+    const activities = [...leads]
+      .filter((lead) => {
+        // Check both updatedAt and lastUpdated fields
+        const updateTime = lead.lastUpdated || lead.updatedAt;
+        const hasUpdateTime = Boolean(updateTime);
+        console.log(`Lead ${lead.name}: lastUpdated = ${lead.lastUpdated}, updatedAt = ${lead.updatedAt}, hasUpdateTime = ${hasUpdateTime}`); // Debug log
+        return hasUpdateTime;
+      })
       .sort((a, b) => {
-        const dateA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
-        const dateB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+        // Use lastUpdated if available, otherwise fall back to updatedAt
+        const dateA = new Date(a.lastUpdated || a.updatedAt).getTime();
+        const dateB = new Date(b.lastUpdated || b.updatedAt).getTime();
+        console.log(`Comparing dates: ${a.name} (${dateA}) vs ${b.name} (${dateB})`); // Debug log
         return dateB - dateA;
       })
-      .slice(0, 5);
+      .slice(0, 10)
+      .map((lead) => {
+        const activity = {
+          leadName: lead.name || 'Unknown Lead',
+          action: determineLastAction(lead),
+          timestamp: lead.lastUpdated || lead.updatedAt,
+          leadId: lead.id,
+          status: lead.status,
+          assignedTo: lead.assignedTo,
+          followUpDate: lead.followUpDate,
+          phone: lead.phone,
+          email: lead.email
+        };
+        console.log('Created activity:', activity); // Debug log
+        return activity;
+      });
+
+    console.log('Final recent activities:', activities); // Debug log
+    return activities;
   }, [leads]);
 
   if (isLoading) {
@@ -241,43 +280,87 @@ const AdminDashboard = () => {
         </div>
       </div>
 
-      {/* Recent Leads */}
+      {/* Recent Activity */}
       <div className="bg-white rounded-lg shadow-sm border border-slate-200">
         <div className="px-6 py-4 border-b border-slate-200">
-          <h2 className="font-medium text-slate-800">Recent Leads</h2>
+          <h2 className="font-medium text-slate-800">Recent Activity</h2>
         </div>
-        <div className="divide-y divide-slate-200">
-          {recentLeads.map((lead) => (
-            <div key={lead.id} className="px-6 py-4">
-              <div className="flex justify-between items-start">
-                <div>
-                  <div className="text-sm font-medium text-slate-800">{lead.name}</div>
-                  <div className="text-xs text-slate-500">{lead.email}</div>
-                </div>
-                <div className="text-sm text-slate-500">
-                  {lead.updatedAt ? format(new Date(lead.updatedAt), 'MMM d, yyyy h:mm a') : 'No date'}
-                </div>
-              </div>
-              <div className="mt-2 flex items-center space-x-2">
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                  lead.status === 'new' ? 'bg-slate-100 text-slate-800' :
-                  lead.status === 'contacted' ? 'bg-blue-100 text-blue-800' :
-                  lead.status === 'qualified' ? 'bg-purple-100 text-purple-800' :
-                  lead.status === 'proposal' ? 'bg-amber-100 text-amber-800' :
-                  lead.status === 'negotiation' ? 'bg-orange-100 text-orange-800' :
-                  lead.status === 'closed_won' ? 'bg-green-100 text-green-800' :
-                  'bg-red-100 text-red-800'
-                }`}>
-                  {lead.status.charAt(0).toUpperCase() + lead.status.slice(1).replace('_', ' ')}
-                </span>
-                {lead.assignedTo && (
-                  <span className="text-xs text-slate-500">
-                    Assigned to: {lead.assignedTo}
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
+        <div className="max-h-96 overflow-y-auto">
+          {recentActivities.length === 0 ? (
+            <div className="px-6 py-4 text-center text-sm text-slate-500">No recent activity</div>
+          ) : (
+            <table className="w-full text-sm text-left text-slate-800">
+              <thead className="text-xs uppercase text-slate-500 bg-slate-50 sticky top-0">
+                <tr>
+                  <th className="px-6 py-3">Name</th>
+                  <th className="px-6 py-3">Contact</th>
+                  <th className="px-6 py-3">Status</th>
+                  <th className="px-6 py-3">Assigned To</th>
+                  <th className="px-6 py-3">Follow-up</th>
+                  <th className="px-6 py-3">Last Updated</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentActivities.map((activity, index) => {
+                  // Use the activity data directly since we're now storing all needed fields
+                  const lead = activity;
+                  if (!lead) {
+                    console.log(`Activity data missing:`, activity); // Debug log
+                    return null;
+                  }
+
+                  // Format contact number by removing the "+" if present
+                  const contactNo = lead.phone?.startsWith('+')
+                    ? lead.phone.slice(1)
+                    : lead.phone;
+
+                  // Format the last updated timestamp
+                  const lastUpdated = format(parseISO(lead.timestamp), 'MMM d, h:mm a');
+
+                  // Capitalize status and handle special cases
+                  const getStatusLabel = (status: string) => {
+                    if (status === 'closed_won') return 'Won';
+                    if (status === 'closed_lost') return 'Lost';
+                    return status.charAt(0).toUpperCase() + status.slice(1);
+                  };
+
+                  // Determine status color
+                  const getStatusColor = (status: string) => {
+                    switch (status.toLowerCase()) {
+                      case 'contacted':
+                        return 'bg-blue-100 text-blue-800';
+                      case 'qualified':
+                        return 'bg-purple-100 text-purple-800';
+                      case 'new':
+                        return 'bg-gray-100 text-gray-800';
+                      default:
+                        return 'bg-gray-100 text-gray-800';
+                    }
+                  };
+
+                  return (
+                    <tr key={index} className="border-b border-slate-200 hover:bg-slate-50">
+                      <td className="px-6 py-4 font-medium">{lead.leadName}</td>
+                      <td className="px-6 py-4">
+                        <div>{contactNo || '-'}</div>
+                        <div className="text-xs text-slate-500">{lead.email || '-'}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(lead.status)}`}
+                        >
+                          {getStatusLabel(lead.status)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">{lead.assignedTo || '-'}</td>
+                      <td className="px-6 py-4">{lead.followUpDate || 'Not scheduled'}</td>
+                      <td className="px-6 py-4">{lastUpdated}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
     </div>

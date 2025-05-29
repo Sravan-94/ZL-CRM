@@ -14,6 +14,7 @@ import AdminLeads from '../pages/admin/AdminLeads';
 import AdminReports from '../pages/admin/AdminReports';
 import AdminCalendar from '../pages/admin/AdminCalendar';
 import RegisterBda from '../pages/admin/RegisterBda';
+import LeadHistory from '../pages/admin/LeadHistory';
 // BDA Pages
 import BdaDashboard from '../pages/bda/BdaDashboard';
 import BdaLeads from '../pages/bda/BdaLeads';
@@ -102,6 +103,14 @@ const AppRoutes = () => {
         <ProtectedRoute requiredRole="admin">
           <DashboardLayout>
             <RegisterBda />
+          </DashboardLayout>
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/admin/leads/:leadId/history" element={
+        <ProtectedRoute>
+          <DashboardLayout>
+            <LeadHistory />
           </DashboardLayout>
         </ProtectedRoute>
       } />

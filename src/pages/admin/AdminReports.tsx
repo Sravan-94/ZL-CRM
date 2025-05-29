@@ -12,33 +12,58 @@ import {
   ResponsiveContainer 
 } from 'recharts';
 import { CalendarClock, CheckCircle, PhoneCall, FileText } from 'lucide-react';
-import { format, subDays, parseISO } from 'date-fns';
+import { format, subDays, parseISO, addDays } from 'date-fns';
+
+type LeadStatus =
+  | 'new'
+  | 'contacted'
+  | 'qualified'
+  | 'proposal'
+  | 'negotiation'
+  | 'closed_won'
+  | 'closed_lost'
+  | 'warm'
+  | 'WrongNumber'
+  | 'NotAnswered'
+  | 'CallBackLater'
+  | 'Interested'
+  | 'NotInterested'
+  | 'SwitchedOff';
 
 interface Lead {
   id: string;
-  name: string;
-  phone: string;
-  email: string;
-  industry: string;
-  companyName: string;
-  city: string;
-  state: string;
-  status: string;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  industry: string | null;
+  companyName: string | null;
+  city: string | null;
+  state: string | null;
+  status: LeadStatus;
   assignedTo: string | null;
   followUpDate: string | null;
-  temperature: string;
-  interests: string;
-  remarks: string;
-  actionStatus: string;
-  actionTaken: string;
+  temperature: string | null;
+  interests: string | null;
+  remarks: string | null;
+  actionStatus: string | null;
+  actionTaken: string | null;
   createdAt: string;
   updatedAt: string;
+  lastUpdated: string;
 }
 
 interface User {
   id: string;
   name: string;
   role: string;
+}
+
+interface BdaPerformance {
+  bdaName: string;
+  totalLeads: number;
+  followupsMade: number;
+  quotationsSent: number;
+  dealsClosed: number;
 }
 
 const AdminReports = () => {
@@ -58,14 +83,36 @@ const AdminReports = () => {
         const leadsResponse = await fetch('http://localhost:8080/api/leads/getall');
         if (!leadsResponse.ok) throw new Error(`Failed to fetch leads: ${leadsResponse.status}`);
         const leadsData = await leadsResponse.json();
-        console.log('Fetched leads:', leadsData); // Debug log
-        setLeads(leadsData);
+        
+        // Map the leads data with proper field mapping
+        const mappedLeads = leadsData.map((lead: any) => ({
+          id: String(lead.id),
+          name: lead.name || null,
+          phone: lead.contactNo || null,
+          email: lead.email || null,
+          industry: lead.industry || null,
+          companyName: lead.companyName || null,
+          city: lead.city || null,
+          state: lead.state || null,
+          status: (lead.status || 'new') as LeadStatus,
+          assignedTo: lead.assignedTo || null,
+          followUpDate: lead.followUp || null,
+          temperature: lead.temperature || null,
+          interests: lead.intrests || null,
+          remarks: lead.remarks || null,
+          actionStatus: lead.actionStatus || null,
+          actionTaken: lead.actionTaken || null,
+          createdAt: lead.createdAt || new Date().toISOString(),
+          updatedAt: lead.lastUpdated || new Date().toISOString(),
+          lastUpdated: lead.lastUpdated || new Date().toISOString()
+        }));
+        
+        setLeads(mappedLeads);
 
         // Fetch users
         const usersResponse = await fetch('http://localhost:8080/api/bda-users');
         if (!usersResponse.ok) throw new Error(`Failed to fetch users: ${usersResponse.status}`);
         const usersData = await usersResponse.json();
-        console.log('Fetched users:', usersData); // Debug log
         setUsers(usersData);
 
         setError(null);
@@ -83,7 +130,10 @@ const AdminReports = () => {
   // Filter leads based on selected BDA
   const filteredLeads = useMemo(() => {
     if (selectedBda === 'all') return leads;
-    return leads.filter(lead => lead.assignedTo === selectedBda);
+    return leads.filter(lead => 
+      lead.assignedTo?.toLowerCase() === selectedBda.toLowerCase() ||
+      lead.assignedTo?.toString() === selectedBda.toString()
+    );
   }, [leads, selectedBda]);
 
   // Generate daily activity data for the selected date range
@@ -101,16 +151,17 @@ const AdminReports = () => {
     }
     
     const data = [];
+    const startDate = subDays(new Date(), days - 1);
     
-    for (let i = days - 1; i >= 0; i--) {
-      const date = subDays(new Date(), i);
+    for (let i = 0; i < days; i++) {
+      const date = addDays(startDate, i);
       const dateStr = format(date, 'yyyy-MM-dd');
       
       // Count all updates on this date as calls
       const updatedLeads = filteredLeads.filter(lead => {
-        if (!lead.updatedAt) return false;
+        if (!lead.lastUpdated) return false;
         try {
-          const leadDate = format(parseISO(lead.updatedAt), 'yyyy-MM-dd');
+          const leadDate = format(parseISO(lead.lastUpdated), 'yyyy-MM-dd');
           return leadDate === dateStr;
         } catch (error) {
           console.error('Error parsing date:', error);
@@ -167,26 +218,18 @@ const AdminReports = () => {
     }
     
     const startDate = subDays(new Date(), days);
-    console.log('Start date for metrics:', startDate); // Debug log
     
     // Filter leads updated within the date range
     const recentLeads = filteredLeads.filter(lead => {
-      if (!lead.updatedAt) {
-        console.log('Lead has no updatedAt:', lead); // Debug log
-        return false;
-      }
+      if (!lead.lastUpdated) return false;
       try {
-        const updatedDate = parseISO(lead.updatedAt);
-        const isRecent = updatedDate >= startDate;
-        console.log('Lead update date:', updatedDate, 'Is recent:', isRecent); // Debug log
-        return isRecent;
+        const updatedDate = parseISO(lead.lastUpdated);
+        return updatedDate >= startDate;
       } catch (error) {
-        console.error('Error parsing date:', error, 'Lead:', lead); // Debug log
+        console.error('Error parsing date:', error);
         return false;
       }
     });
-    
-    console.log('Recent leads count:', recentLeads.length); // Debug log
     
     // Count all updates as calls
     const totalCalls = recentLeads.length;
@@ -200,15 +243,12 @@ const AdminReports = () => {
       lead.status?.toLowerCase() === 'closed_won'
     ).length;
     
-    const metricsResult = {
+    return {
       totalCalls,
       followupsMade,
       quotationsSent,
       dealsClosed
     };
-    
-    console.log('Calculated metrics:', metricsResult); // Debug log
-    return metricsResult;
   }, [filteredLeads, dateRange]);
 
   // Get conversion rate
@@ -222,10 +262,10 @@ const AdminReports = () => {
   // Get recent lead updates
   const recentLeadUpdates = useMemo(() => {
     return [...filteredLeads]
-      .filter(lead => lead.updatedAt) // Only include leads with updatedAt
+      .filter(lead => lead.lastUpdated) // Only include leads with lastUpdated
       .sort((a, b) => {
         try {
-          return new Date(b.updatedAt!).getTime() - new Date(a.updatedAt!).getTime();
+          return new Date(b.lastUpdated!).getTime() - new Date(a.lastUpdated!).getTime();
         } catch (error) {
           console.error('Error sorting dates:', error);
           return 0;
@@ -244,19 +284,31 @@ const AdminReports = () => {
           lead.assignedTo?.toString() === bda.id.toString()
         );
         
+        // Filter leads within the selected date range
+        const startDate = subDays(new Date(), dateRange === '30days' ? 30 : dateRange === '90days' ? 90 : 7);
+        const recentBdaLeads = bdaLeads.filter(lead => {
+          if (!lead.lastUpdated) return false;
+          try {
+            const updatedDate = parseISO(lead.lastUpdated);
+            return updatedDate >= startDate;
+          } catch (error) {
+            return false;
+          }
+        });
+        
         return {
           bdaName: bda.name,
-          totalLeads: bdaLeads.length,
-          followupsMade: bdaLeads.filter(lead => lead.followUpDate).length,
-          quotationsSent: bdaLeads.filter(lead => 
+          totalLeads: recentBdaLeads.length,
+          followupsMade: recentBdaLeads.filter(lead => lead.followUpDate).length,
+          quotationsSent: recentBdaLeads.filter(lead => 
             lead.actionTaken?.toLowerCase().includes('quotation')
           ).length,
-          dealsClosed: bdaLeads.filter(lead => 
+          dealsClosed: recentBdaLeads.filter(lead => 
             lead.status?.toLowerCase() === 'closed_won'
           ).length
         };
       });
-  }, [leads, users]);
+  }, [leads, users, dateRange]);
 
   if (isLoading) {
     return (

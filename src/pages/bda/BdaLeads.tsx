@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   ArrowUpDown,
   Search,
@@ -10,8 +10,9 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  Clock,
 } from 'lucide-react';
-import { format, parseISO, isValid } from 'date-fns';
+import { format, parseISO, isValid, isToday, isBefore } from 'date-fns';
 import { toast } from 'react-hot-toast';
 import Papa from 'papaparse';
 import LeadModal from '../../components/leads/LeadModal';
@@ -30,11 +31,12 @@ const BdaLeads = () => {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState<keyof Lead>('updatedAt');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [sortBy, setSortBy] = useState<keyof Lead>('status');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<LeadStatus | 'all'>('all');
   const [bdaFilter, setBdaFilter] = useState<string>('all');
+  const [followUpFilter, setFollowUpFilter] = useState<'all' | 'today' | 'overdue'>('all');
   const [isAssigningLeads, setIsAssigningLeads] = useState(false);
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
   const [selectedBdaForAssignment, setSelectedBdaForAssignment] = useState<string>('');
@@ -43,6 +45,24 @@ const BdaLeads = () => {
   const [bdaFetchError, setBdaFetchError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Define the order of statuses
+  const statusOrder: Record<LeadStatus, number> = {
+    'new': 1,
+    'contacted': 2,
+    'qualified': 3,
+    'proposal': 4,
+    'negotiation': 5,
+    'closed_won': 6,
+    'closed_lost': 7,
+    'warm': 8,
+    'WrongNumber': 9,
+    'NotAnswered': 10,
+    'CallBackLater': 11,
+    'Interested': 12,
+    'NotInterested': 13,
+    'SwitchedOff': 14
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -65,23 +85,16 @@ const BdaLeads = () => {
               city: lead.city || null,
               state: lead.state || null,
               status: (lead.status || 'new') as LeadStatus,
-              assignedBdaId: lead.assignedBdaId ? String(lead.assignedBdaId) : null,
-              assignedBdaName: lead.assignedTo || null,
+              assignedTo: lead.assignedTo || null,
               followUpDate: lead.followUp || null,
-              intrests: lead.intrests || null,
+              temperature: lead.temperature || null,
+              interests: lead.interests || null,
               remarks: lead.remarks || null,
               actionStatus: lead.actionStatus || null,
               actionTaken: lead.actionTaken || null,
               createdAt: (typeof lead.createdAt === 'string' && lead.createdAt) ? lead.createdAt : new Date().toISOString(),
               updatedAt: (typeof lead.lastUpdated === 'string' && lead.lastUpdated) ? lead.lastUpdated : new Date().toISOString(),
-              whatsappSent: lead.actionTaken?.includes('whatsapp') || false,
-              emailSent: lead.actionTaken?.includes('email') || false,
-              quotationSent: lead.actionTaken?.includes('quotation') || false,
-              sampleWorkSent: lead.actionTaken?.includes('sample') || false,
-              MeetingBooked: lead.actionTaken?.includes('MeetingBooked') || false,
-              DemoScheduled: lead.actionTaken?.includes('DemoScheduled') || false,
-              NeedMoreInfo: lead.actionTaken?.includes('NeedMoreInfo') || false,
-              WaitingForDecision: lead.actionTaken?.includes('WaitingForDecision') || false,
+              lastUpdated: (typeof lead.lastUpdated === 'string' && lead.lastUpdated) ? lead.lastUpdated : new Date().toISOString(),
             }))
           : [];
 
@@ -155,31 +168,105 @@ const BdaLeads = () => {
       const matchesStatus = statusFilter === 'all' || lead.status === statusFilter;
       const matchesBda =
         bdaFilter === 'all' ||
-        (bdaFilter === 'unassigned' ? !lead.assignedBdaId : lead.assignedBdaId === bdaFilter);
-      return matchesSearch && matchesStatus && matchesBda;
+        (bdaFilter === 'unassigned' ? !lead.assignedTo : lead.assignedTo === bdaFilter);
+      const matchesFollowUp =
+        followUpFilter === 'all' ||
+        (followUpFilter === 'today' &&
+          lead.followUpDate &&
+          isValid(parseISO(lead.followUpDate)) &&
+          isToday(parseISO(lead.followUpDate))) ||
+        (followUpFilter === 'overdue' &&
+          lead.followUpDate &&
+          isValid(parseISO(lead.followUpDate)) &&
+          isBefore(parseISO(lead.followUpDate), new Date()) &&
+          !isToday(parseISO(lead.followUpDate)));
+      return matchesSearch && matchesStatus && matchesBda && matchesFollowUp;
     })
     .sort((a, b) => {
-      let valueA = a[sortBy] ?? '';
-      let valueB = b[sortBy] ?? '';
-
-      if (sortBy === 'createdAt' || sortBy === 'updatedAt' || sortBy === 'followUpDate') {
-        const dateA = isValidDate(valueA as string) ? new Date(valueA as string).getTime() : 0;
-        const dateB = isValidDate(valueB as string) ? new Date(valueB as string).getTime() : 0;
-        return sortDirection === 'asc' ? dateA - dateB : dateB - dateA;
+      // First sort by status using the predefined order
+      const statusA = statusOrder[a.status] || 999;
+      const statusB = statusOrder[b.status] || 999;
+      
+      if (statusA !== statusB) {
+        return statusA - statusB;
       }
 
-      return sortDirection === 'asc'
-        ? String(valueA).localeCompare(String(valueB))
-        : String(valueB).localeCompare(String(valueA));
+      // If status is the same, sort by lastUpdated within the status group
+      const dateA = new Date(a.lastUpdated || a.updatedAt || '').getTime();
+      const dateB = new Date(b.lastUpdated || b.updatedAt || '').getTime();
+      return dateA - dateB; // Ascending order for dates within status group
     });
+
+  const totalLeadsCount = filteredLeads.length;
+
+  const todayFollowupsCount = useMemo(() => {
+    return leads.filter(lead => 
+      lead.followUpDate && isValid(parseISO(lead.followUpDate)) && isToday(parseISO(lead.followUpDate))
+    ).length;
+  }, [leads]);
+
+  const overdueFollowupsCount = useMemo(() => {
+    return leads.filter(lead => 
+      lead.followUpDate && isValid(parseISO(lead.followUpDate)) && isBefore(parseISO(lead.followUpDate), new Date()) && !isToday(parseISO(lead.followUpDate))
+    ).length;
+  }, [leads]);
+
+  const closedDealsCount = useMemo(() => {
+    return filteredLeads.filter(lead => lead.status === 'closed_won').length;
+  }, [filteredLeads]);
 
   const handleOpenLeadModal = (lead: Lead) => {
     setSelectedLead({
       ...lead,
       createdAt: lead.createdAt || new Date().toISOString(),
       updatedAt: lead.updatedAt || new Date().toISOString(),
+      lastUpdated: lead.lastUpdated || new Date().toISOString(),
     });
     setIsModalOpen(true);
+  };
+
+  const handleSaveLead = async (updatedLead: Lead): Promise<boolean> => {
+    console.log('Attempting to save lead:', updatedLead);
+    setIsLoading(true);
+    let success = false;
+    try {
+      const payload = {
+        ...updatedLead,
+        id: parseInt(updatedLead.id),
+        loggedinId: user?.id ? parseInt(user.id) : undefined,
+      };
+      console.log('Saving lead with payload:', payload);
+      
+      const response = await fetch(`http://localhost:8080/api/leads/update/${payload.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to save lead: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log('Save lead response:', result);
+      toast.success('Lead updated successfully');
+      
+      setLeads(prevLeads =>
+        prevLeads.map(lead => (lead.id === updatedLead.id ? result : lead))
+      );
+
+      success = true;
+    } catch (error) {
+      console.error('Error saving lead:', error);
+      toast.error(`Failed to save lead: ${error instanceof Error ? error.message : String(error)}`);
+      success = false;
+    } finally {
+      setIsLoading(false);
+    }
+    return success;
   };
 
   const handleAssignLeads = async () => {
@@ -213,12 +300,10 @@ const BdaLeads = () => {
           const updatedLead = selectedLeads.has(lead.id)
             ? {
                 ...lead,
-                assignedBdaId: selectedBda.id,
-                assignedBdaName: selectedBda.name,
+                assignedTo: selectedBda.name,
                 updatedAt: new Date().toISOString(),
               }
             : lead;
-          // Ensure createdAt and updatedAt are strings for the new state
           return {
             ...updatedLead,
             createdAt: typeof updatedLead.createdAt === 'string' ? updatedLead.createdAt : new Date().toISOString(),
@@ -273,23 +358,16 @@ const BdaLeads = () => {
             city: lead.city || null,
             state: lead.state || null,
             status: (lead.status || 'new') as LeadStatus,
-            assignedBdaId: lead.assignedBdaId ? String(lead.assignedBdaId) : null,
-            assignedBdaName: lead.assignedTo || null,
+            assignedTo: lead.assignedTo || null,
             followUpDate: lead.followUp || null,
-            intrests: lead.intrests || null,
+            temperature: lead.temperature || null,
+            interests: lead.interests || null,
             remarks: lead.remarks || null,
             actionStatus: lead.actionStatus || null,
             actionTaken: lead.actionTaken || null,
             createdAt: (typeof lead.createdAt === 'string' && lead.createdAt) ? lead.createdAt : new Date().toISOString(),
             updatedAt: (typeof lead.lastUpdated === 'string' && lead.lastUpdated) ? lead.lastUpdated : new Date().toISOString(),
-            whatsappSent: lead.actionTaken?.includes('whatsapp') || false,
-            emailSent: lead.actionTaken?.includes('email') || false,
-            quotationSent: lead.actionTaken?.includes('quotation') || false,
-            sampleWorkSent: lead.actionTaken?.includes('sample') || false,
-            MeetingBooked: lead.actionTaken?.includes('MeetingBooked') || false,
-            DemoScheduled: lead.actionTaken?.includes('DemoScheduled') || false,
-            NeedMoreInfo: lead.actionTaken?.includes('NeedMoreInfo') || false,
-            WaitingForDecision: lead.actionTaken?.includes('WaitingForDecision') || false,
+            lastUpdated: (typeof lead.lastUpdated === 'string' && lead.lastUpdated) ? lead.lastUpdated : new Date().toISOString(),
           }))
         : [];
 
@@ -311,8 +389,8 @@ const BdaLeads = () => {
       Email: lead.email || '',
       Status: lead.status,
       ActionStatus: lead.actionStatus || '',
-      AssignedTo: lead.assignedBdaName || 'Unassigned',
-      Intrests: lead.intrests || '',
+      AssignedTo: lead.assignedTo || 'Unassigned',
+      Intrests: lead.interests || '',
       Remarks: lead.remarks || '',
       ActionTaken: lead.actionTaken || '',
       CompanyName: lead.companyName || '',
@@ -334,6 +412,14 @@ const BdaLeads = () => {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
     toast.success('Leads exported successfully');
+  };
+
+  const handleClearFilters = () => {
+    setStatusFilter('all');
+    setBdaFilter('all');
+    setFollowUpFilter('all');
+    setSearchTerm('');
+    setFiltersOpen(false);
   };
 
   return (
@@ -447,15 +533,25 @@ const BdaLeads = () => {
             disabled={isLoading}
           />
         </div>
-        <button
-          onClick={() => setFiltersOpen(!filtersOpen)}
-          className="px-3 py-2 text-sm font-medium rounded-md bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 flex items-center sm:w-auto w-full justify-center disabled:opacity-50"
-          disabled={isLoading}
-        >
-          <Filter className="h-4 w-4 mr-1.5" />
-          Filter
-          {filtersOpen ? <ChevronUp className="h-4 w-4 ml-1.5" /> : <ChevronDown className="h-4 w-4 ml-1.5" />}
-        </button>
+        <div className="flex space-x-2 w-full sm:w-auto">
+          <button
+            onClick={() => setFiltersOpen(!filtersOpen)}
+            className="px-3 py-2 text-sm font-medium rounded-md bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 flex items-center w-full sm:w-auto justify-center disabled:opacity-50"
+            disabled={isLoading}
+          >
+            <Filter className="h-4 w-4 mr-1.5" />
+            Filter
+            {filtersOpen ? <ChevronUp className="h-4 w-4 ml-1.5" /> : <ChevronDown className="h-4 w-4 ml-1.5" />}
+          </button>
+          <button
+            onClick={handleClearFilters}
+            className="px-3 py-2 text-sm font-medium rounded-md bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 flex items-center w-full sm:w-auto justify-center disabled:opacity-50"
+            disabled={isLoading}
+          >
+            <X className="h-4 w-4 mr-1.5" />
+            Clear Filters
+          </button>
+        </div>
       </div>
 
       {filtersOpen && (
@@ -511,6 +607,78 @@ const BdaLeads = () => {
         </div>
       )}
 
+      {/* Filter Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* All Leads Card */}
+        <div
+          className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center space-x-4 cursor-pointer hover:bg-blue-100 transition duration-150 ease-in-out"
+          onClick={() => {
+            setStatusFilter('all');
+            setBdaFilter('all');
+            setFollowUpFilter('all');
+          }}
+        >
+          <div className="p-2 rounded-full bg-blue-100">
+            <Clock className="h-6 w-6 text-blue-600" />
+          </div>
+          <div>
+            <div className="text-sm font-medium text-blue-800">All Leads</div>
+            <div className="text-2xl font-semibold text-blue-900">{leads.length}</div>
+          </div>
+        </div>
+        {/* Today's Follow-ups Card */}
+        <div
+          className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-center space-x-4 cursor-pointer hover:bg-amber-100 transition duration-150 ease-in-out"
+          onClick={() => {
+            setStatusFilter('all');
+            setBdaFilter('all');
+            setFollowUpFilter('today');
+          }}
+        >
+          <div className="p-2 rounded-full bg-amber-100">
+            <Clock className="h-6 w-6 text-amber-600" />
+          </div>
+          <div>
+            <div className="text-sm font-medium text-amber-800">Today's Follow-ups</div>
+            <div className="text-2xl font-semibold text-amber-900">{todayFollowupsCount}</div>
+          </div>
+        </div>
+        {/* Overdue Follow-ups Card */}
+        <div
+          className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center space-x-4 cursor-pointer hover:bg-red-100 transition duration-150 ease-in-out"
+          onClick={() => {
+            setStatusFilter('all');
+            setBdaFilter('all');
+            setFollowUpFilter('overdue');
+          }}
+        >
+          <div className="p-2 rounded-full bg-red-100">
+            <Clock className="h-6 w-6 text-red-600" />
+          </div>
+          <div>
+            <div className="text-sm font-medium text-red-800">Overdue Follow-ups</div>
+            <div className="text-2xl font-semibold text-red-900">{overdueFollowupsCount}</div>
+          </div>
+        </div>
+        {/* New Leads Card */}
+        <div
+          className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center space-x-4 cursor-pointer hover:bg-green-100 transition duration-150 ease-in-out"
+          onClick={() => {
+            setStatusFilter('new');
+            setBdaFilter('all');
+            setFollowUpFilter('all');
+          }}
+        >
+          <div className="p-2 rounded-full bg-green-100">
+            <UserPlus className="h-6 w-6 text-green-600" />
+          </div>
+          <div>
+            <div className="text-sm font-medium text-green-800">New Leads</div>
+            <div className="text-2xl font-semibold text-green-900">{useMemo(() => leads.filter(lead => lead.status === 'new').length, [leads])}</div>
+          </div>
+        </div>
+      </div>
+
       {isLoading && <div className="text-center py-4">Loading...</div>}
 
       {!isLoading && (
@@ -538,14 +706,15 @@ const BdaLeads = () => {
                       />
                     </th>
                   )}
-                 <th
-                  scope="col"
-                  className="uppercase tracking-wider cursor-pointer"
-                  onClick={() => handleSort('name')}
-                          >
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer"
+                    onClick={() => handleSort('name')}
+                  >
+                    <div className="flex items-center">
                       Name
                       <ArrowUpDown className="h-4 w-4 ml-1" />
-                    
+                    </div>
                   </th>
                   <th
                     scope="col"
@@ -566,7 +735,7 @@ const BdaLeads = () => {
                   <th
                     scope="col"
                     className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer"
-                    onClick={() => handleSort('assignedBdaName')}
+                    onClick={() => handleSort('assignedTo')}
                   >
                     <div className="flex items-center">
                       Assigned To
@@ -674,7 +843,7 @@ const BdaLeads = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{lead.assignedBdaName || 'Unassigned'}</div>
+                        <div className="text-sm text-gray-900">{lead.assignedTo || 'Unassigned'}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {lead.followUpDate && isValidDate(lead.followUpDate) ? (
@@ -722,95 +891,7 @@ const BdaLeads = () => {
             setSelectedLead(null);
           }}
           lead={selectedLead}
-          onSave={async (updatedLead: Lead) => {
-            try {
-              if (!user || user.id == null) {
-                toast.error('User authentication required.');
-                console.error('Auth user missing:', user);
-                return false;
-              }
-
-              const payload = {
-                name: updatedLead.name ?? "",
-                contactNo: updatedLead.phone ?? "",
-                email: updatedLead.email ?? "",
-                status: updatedLead.status ?? "",
-                actionStatus: updatedLead.actionStatus ?? "",
-                assignedTo: updatedLead.assignedBdaName ?? "",
-                intrests: updatedLead.intrests ?? "",
-                remarks: updatedLead.remarks ?? "",
-                actionTaken: updatedLead.actionTaken ?? "",
-                followUp: updatedLead.followUpDate ?? "",
-                loggedinId: Number(user.id),
-                companyName: updatedLead.companyName ?? "",
-                industry: updatedLead.industry ?? "",
-                city: updatedLead.city ?? "",
-                state: updatedLead.state ?? ""
-              };
-
-              const response = await fetch(`http://localhost:8080/api/leads/update/${updatedLead.id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-              });
-
-              if (!response.ok) {
-                const errorText = await response.text();
-                console.error('Backend error:', errorText);
-                toast.error(`Failed to update lead: ${errorText}`);
-                return false;
-              }
-
-              const leadsResponse = await fetch('http://localhost:8080/api/leads/getall');
-              if (!leadsResponse.ok) {
-                console.error('Failed to fetch leads:', leadsResponse.status);
-                toast.error('Failed to refresh leads');
-                return false;
-              }
-
-              const rawLeads = await leadsResponse.json();
-              const updatedLeads: Lead[] = Array.isArray(rawLeads)
-                ? rawLeads.map((lead: any) => ({
-                    id: String(lead.id),
-                    name: lead.name || null,
-                    phone: lead.contactNo || null,
-                    email: lead.email || null,
-                    industry: lead.industry || null,
-                    companyName: lead.companyName || null,
-                    city: lead.city || null,
-                    state: lead.state || null,
-                    status: (lead.status || 'new') as LeadStatus,
-                    assignedBdaId: lead.assignedBdaId ? String(lead.assignedBdaId) : null,
-                    assignedBdaName: lead.assignedTo || null,
-                    followUpDate: lead.followUp || null,
-                    intrests: lead.intrests || null,
-                    remarks: lead.remarks || null,
-                    actionStatus: lead.actionStatus || null,
-                    actionTaken: lead.actionTaken || null,
-                    createdAt: (typeof lead.createdAt === 'string' && lead.createdAt) ? lead.createdAt : new Date().toISOString(),
-                    updatedAt: (typeof lead.lastUpdated === 'string' && lead.lastUpdated) ? lead.lastUpdated : new Date().toISOString(),
-                    whatsappSent: lead.actionTaken?.includes('whatsapp') || false,
-                    emailSent: lead.actionTaken?.includes('email') || false,
-                    quotationSent: lead.actionTaken?.includes('quotation') || false,
-                    sampleWorkSent: lead.actionTaken?.includes('sample') || false,
-                    MeetingBooked: lead.actionTaken?.includes('MeetingBooked') || false,
-                    DemoScheduled: lead.actionTaken?.includes('DemoScheduled') || false,
-                    NeedMoreInfo: lead.actionTaken?.includes('NeedMoreInfo') || false,
-                    WaitingForDecision: lead.actionTaken?.includes('WaitingForDecision') || false,
-                  }))
-                : [];
-
-              setLeads(updatedLeads);
-              setIsModalOpen(false);
-              setSelectedLead(null);
-              toast.success('Lead updated successfully');
-              return true;
-            } catch (err) {
-              console.error('Error updating lead:', err);
-              toast.error('Failed to update lead');
-              return false;
-            }
-          }}
+          onSave={handleSaveLead}
           readOnly={false}
         />
       )}
