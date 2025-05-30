@@ -17,6 +17,7 @@ import {
   Clock,
   Star,
   XCircle,
+  Trash2,
 } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
 import { toast } from 'react-hot-toast';
@@ -81,6 +82,7 @@ const AdminLeads = () => {
   const [statusFilter, setStatusFilter] = useState<LeadStatus | 'all'>('all');
   const [bdaFilter, setBdaFilter] = useState<string>('all');
   const [isAssigningLeads, setIsAssigningLeads] = useState(false);
+  const [isDeletingLeads, setIsDeletingLeads] = useState(false);
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
   const [selectedBdaForAssignment, setSelectedBdaForAssignment] = useState<string>('');
   const [bdaUsers, setBdaUsers] = useState<User[]>([]);
@@ -201,6 +203,9 @@ const AdminLeads = () => {
     setSearchTerm('');
     setStatusFilter('all');
     setBdaFilter('all');
+    setIsAssigningLeads(false);
+    setIsDeletingLeads(false);
+    setSelectedLeads(new Set());
     setFiltersOpen(false);
   };
 
@@ -341,6 +346,45 @@ const AdminLeads = () => {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedLeads.size === 0) {
+      toast.error('Please select at least one lead to delete');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await fetch('https://crmbackend-lxbe.onrender.com/api/leads/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leadIds: Array.from(selectedLeads).map(id => parseInt(id)),
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to delete leads');
+
+      // Remove deleted leads from state
+      setLeads(prev => prev.filter(lead => !selectedLeads.has(lead.id)));
+
+      // Adjust current page if necessary
+      const remainingLeads = filteredLeads.filter(lead => !selectedLeads.has(lead.id));
+      const newTotalPages = Math.ceil(remainingLeads.length / leadsPerPage);
+      if (currentPage > newTotalPages && newTotalPages > 0) {
+        setCurrentPage(newTotalPages);
+      }
+
+      setSelectedLeads(new Set());
+      setIsDeletingLeads(false);
+      toast.success(`${selectedLeads.size} leads deleted successfully`);
+    } catch (err) {
+      console.error('Error deleting leads:', err);
+      toast.error('Failed to delete leads');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleImportCSV = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -437,7 +481,7 @@ const AdminLeads = () => {
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setIsAssigningLeads(!isAssigningLeads)}
-            disabled={isLoading || !isLeadsLoaded}
+            disabled={isLoading || !isLeadsLoaded || isDeletingLeads}
             className={`px-3 py-2 text-sm font-medium rounded-md flex items-center ${
               isAssigningLeads
                 ? 'bg-indigo-100 text-indigo-700'
@@ -446,6 +490,18 @@ const AdminLeads = () => {
           >
             <UserPlus className="h-4 w-4 mr-1.5" />
             Assign Leads
+          </button>
+          <button
+            onClick={() => setIsDeletingLeads(!isDeletingLeads)}
+            disabled={isLoading || !isLeadsLoaded || isAssigningLeads}
+            className={`px-3 py-2 text-sm font-medium rounded-md flex items-center ${
+              isDeletingLeads
+                ? 'bg-red-100 text-red-700'
+                : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed'
+            }`}
+          >
+            <Trash2 className="h-4 w-4 mr-1.5" />
+            Bulk Delete
           </button>
           <button
             onClick={() => fileInputRef.current?.click()}
@@ -520,6 +576,37 @@ const AdminLeads = () => {
                   setIsAssigningLeads(false);
                   setSelectedLeads(new Set());
                   setSelectedBdaForAssignment('');
+                }}
+                className="p-2 text-slate-500 hover:text-slate-700 rounded-md"
+                disabled={isLoading}
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isDeletingLeads && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
+            <div>
+              <h3 className="font-medium text-red-700">Delete Selected Leads</h3>
+              <p className="text-sm text-red-600">Selected: {selectedLeads.size} leads</p>
+            </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={handleBulkDelete}
+                disabled={selectedLeads.size === 0 || isLoading}
+                className="px-3 py-2 text-sm font-medium rounded-md bg-red-600 text-white hover:bg-red-700 disabled:bg-red-300 flex items-center"
+              >
+                <Trash2 className="h-4 w-4 mr-1.5" />
+                Delete
+              </button>
+              <button
+                onClick={() => {
+                  setIsDeletingLeads(false);
+                  setSelectedLeads(new Set());
                 }}
                 className="p-2 text-slate-500 hover:text-slate-700 rounded-md"
                 disabled={isLoading}
@@ -695,7 +782,7 @@ const AdminLeads = () => {
             <table className="min-w-full divide-y divide-slate-200">
               <thead className="bg-slate-50">
                 <tr>
-                  {isAssigningLeads && (
+                  {(isAssigningLeads || isDeletingLeads) && (
                     <th
                       scope="col"
                       className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider w-10"
@@ -776,7 +863,7 @@ const AdminLeads = () => {
                 {paginatedLeads.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={isAssigningLeads ? 7 : 6}
+                      colSpan={(isAssigningLeads || isDeletingLeads) ? 7 : 6}
                       className="px-6 py-4 text-center text-sm text-slate-500"
                     >
                       No leads found. Try adjusting your filters.
@@ -788,14 +875,14 @@ const AdminLeads = () => {
                       key={lead.id}
                       className="hover:bg-slate-50 cursor-pointer"
                       onClick={() => {
-                        if (isAssigningLeads) {
+                        if (isAssigningLeads || isDeletingLeads) {
                           toggleLeadSelection(lead.id);
                         } else {
                           handleOpenLeadModal(lead);
                         }
                       }}
                     >
-                      {isAssigningLeads && (
+                      {(isAssigningLeads || isDeletingLeads) && (
                         <td
                           className="px-6 py-4 whitespace-nowrap"
                           onClick={e => e.stopPropagation()}
