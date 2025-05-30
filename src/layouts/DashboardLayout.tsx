@@ -1,4 +1,4 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { 
@@ -12,11 +12,18 @@ import {
   Building2,
   Bell
 } from 'lucide-react';
-import { generateCalendarEvents } from '../data/mockData';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, isToday, isBefore } from 'date-fns';
 
 interface DashboardLayoutProps {
   children: ReactNode;
+}
+
+interface Notification {
+  id: string;
+  title: string;
+  date: Date;
+  status: 'overdue' | 'today' | 'upcoming';
+  leadId: string;
 }
 
 const DashboardLayout = ({ children }: DashboardLayoutProps) => {
@@ -25,18 +32,68 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
 
-  // Get today's follow-ups for notifications
-  const calendarEvents = generateCalendarEvents(isAdmin ? undefined : user?.id);
-  const todayEvents = calendarEvents.filter(event => event.status === 'today');
-  const overdueEvents = calendarEvents.filter(event => event.status === 'overdue');
-  const notifications = [...overdueEvents, ...todayEvents];
-  
+  // Fetch notifications from API
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      try {
+        const response = await fetch('https://crmbackend-lxbe.onrender.com/api/leads/getall');
+        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+        const data = await response.json();
+        
+        // Filter leads based on user role
+        const filteredLeads = isAdmin 
+          ? data 
+          : data.filter((lead: any) => {
+              if (!lead.assignedTo) return false;
+              const assignedTo = lead.assignedTo.trim().toLowerCase();
+              const userId = user?.id?.toString().trim().toLowerCase();
+              const userName = user?.name?.trim().toLowerCase();
+              return assignedTo === userId || assignedTo === userName;
+            });
+
+        // Generate notifications from leads with follow-up dates
+        const today = new Date();
+        const notificationEvents = filteredLeads
+          .filter((lead: any) => lead.followUp)
+          .map((lead: any) => {
+            const followUpDate = new Date(lead.followUp);
+            
+            // Determine status based on date
+            let status: 'overdue' | 'today' | 'upcoming';
+            if (isBefore(followUpDate, today) && !isToday(followUpDate)) {
+              status = 'overdue';
+            } else if (isToday(followUpDate)) {
+              status = 'today';
+            } else {
+              status = 'upcoming';
+            }
+            
+            return {
+              id: lead.id.toString(),
+              title: lead.name || 'Unknown Lead',
+              date: followUpDate,
+              status,
+              leadId: lead.id.toString(),
+            };
+          })
+          .filter((event: Notification) => event.status === 'today' || event.status === 'overdue');
+        
+        setNotifications(notificationEvents);
+      } catch (error) {
+        console.error('Error fetching notifications:', error);
+      }
+    };
+
+    fetchNotifications();
+  }, [user, isAdmin]);
+
   // Menu items based on user role
   const getMenuItems = () => {
     if (isAdmin) {
@@ -173,13 +230,13 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
                     </div>
                   ) : (
                     <>
-                      {overdueEvents.length > 0 && (
+                      {notifications.filter(n => n.status === 'overdue').length > 0 && (
                         <div className="px-4 py-1 text-xs font-medium text-red-500 bg-red-50">
                           Overdue Follow-ups
                         </div>
                       )}
                       
-                      {overdueEvents.map(event => (
+                      {notifications.filter(n => n.status === 'overdue').map(event => (
                         <div key={event.id} className="px-4 py-2 border-b border-slate-100 hover:bg-slate-50">
                           <div className="flex items-start">
                             <div className="w-2 h-2 mt-1.5 rounded-full bg-red-500 mr-2"></div>
@@ -193,13 +250,13 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
                         </div>
                       ))}
                       
-                      {todayEvents.length > 0 && (
+                      {notifications.filter(n => n.status === 'today').length > 0 && (
                         <div className="px-4 py-1 text-xs font-medium text-amber-500 bg-amber-50">
                           Today's Follow-ups
                         </div>
                       )}
                       
-                      {todayEvents.map(event => (
+                      {notifications.filter(n => n.status === 'today').map(event => (
                         <div key={event.id} className="px-4 py-2 border-b border-slate-100 hover:bg-slate-50">
                           <div className="flex items-start">
                             <div className="w-2 h-2 mt-1.5 rounded-full bg-amber-500 mr-2"></div>

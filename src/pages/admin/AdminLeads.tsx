@@ -84,12 +84,13 @@ const AdminLeads = () => {
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
   const [selectedBdaForAssignment, setSelectedBdaForAssignment] = useState<string>('');
   const [bdaUsers, setBdaUsers] = useState<User[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [bdaFetchError, setBdaFetchError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const leadsPerPage = 50;
   const [activeCardFilter, setActiveCardFilter] = useState<'all' | 'today' | 'overdue' | 'new'>('all');
+  const [isLeadsLoaded, setIsLeadsLoaded] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -131,30 +132,20 @@ const AdminLeads = () => {
             }))
           : [];
 
-        if (isMounted) setLeads(leadsData);
+        if (isMounted) {
+          setLeads(leadsData);
+          setIsLeadsLoaded(true);
+        }
 
         const usersResponse = await fetch('https://crmbackend-lxbe.onrender.com/api/bda-users');
         if (!usersResponse.ok) throw new Error(`Failed to fetch BDAs: ${usersResponse.status}`);
         const usersData = await usersResponse.json();
-
-        const bdaUsers = Array.isArray(usersData)
-          ? usersData
-              .filter((user: any) => user.role === 'BDA')
-              .map((user: any) => ({
-                id: String(user.id),
-                name: user.name || '',
-                role: user.role as 'BDA' | 'admin',
-              }))
-          : [];
-
+        if (isMounted) setBdaUsers(usersData);
+      } catch (error) {
+        console.error('Error fetching data:', error);
         if (isMounted) {
-          setBdaUsers(bdaUsers);
-          setBdaFetchError(bdaUsers.length === 0 ? 'No BDA users available' : null);
-        }
-      } catch (err) {
-        if (isMounted) {
-          console.error('Error fetching data:', err);
-          toast.error('Failed to load leads or BDAs');
+          toast.error('Failed to load data');
+          setIsLeadsLoaded(false);
         }
       } finally {
         if (isMounted) setIsLoading(false);
@@ -446,11 +437,11 @@ const AdminLeads = () => {
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setIsAssigningLeads(!isAssigningLeads)}
-            disabled={isLoading}
+            disabled={isLoading || !isLeadsLoaded}
             className={`px-3 py-2 text-sm font-medium rounded-md flex items-center ${
               isAssigningLeads
                 ? 'bg-indigo-100 text-indigo-700'
-                : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50'
+                : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed'
             }`}
           >
             <UserPlus className="h-4 w-4 mr-1.5" />
@@ -458,8 +449,8 @@ const AdminLeads = () => {
           </button>
           <button
             onClick={() => fileInputRef.current?.click()}
-            disabled={isLoading}
-            className="px-3 py-2 text-sm font-medium rounded-md bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 flex items-center disabled:opacity-50"
+            disabled={isLoading || !isLeadsLoaded}
+            className="px-3 py-2 text-sm font-medium rounded-md bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Upload className="h-4 w-4 mr-1.5" />
             Import CSV
@@ -469,18 +460,25 @@ const AdminLeads = () => {
               onChange={handleImportCSV}
               accept=".csv"
               className="hidden"
+              disabled={isLoading || !isLeadsLoaded}
             />
           </button>
           <button
             onClick={handleExportCSV}
-            disabled={isLoading}
-            className="px-3 py-2 text-sm font-medium rounded-md bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 flex items-center disabled:opacity-50"
+            disabled={isLoading || !isLeadsLoaded}
+            className="px-3 py-2 text-sm font-medium rounded-md bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Download className="h-4 w-4 mr-1.5" />
             Export CSV
           </button>
         </div>
       </div>
+
+      {isLoading && (
+        <div className="text-center py-4">
+          <div className="text-slate-500">Loading leads data...</div>
+        </div>
+      )}
 
       {isAssigningLeads && (
         <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">

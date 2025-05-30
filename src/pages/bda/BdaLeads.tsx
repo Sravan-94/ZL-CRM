@@ -1,13 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import {
   ArrowUpDown,
   Search,
   Filter,
-  Download,
-  Upload,
-  UserPlus,
-  X,
-  Check,
   ChevronDown,
   ChevronUp,
   Users,
@@ -18,7 +13,6 @@ import {
 } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
 import { toast } from 'react-hot-toast';
-import Papa from 'papaparse';
 import LeadModal from '../../components/leads/LeadModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { Lead, LeadStatus } from '../../types/lead';
@@ -39,99 +33,95 @@ const BdaLeads = () => {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<LeadStatus | 'all'>('all');
-  const [bdaFilter, setBdaFilter] = useState<string>('all');
-  const [isAssigningLeads, setIsAssigningLeads] = useState(false);
-  const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
-  const [selectedBdaForAssignment, setSelectedBdaForAssignment] = useState<string>('');
-  const [bdaUsers, setBdaUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [bdaFetchError, setBdaFetchError] = useState<string | null>(null);
   const [activeCardFilter, setActiveCardFilter] = useState<'all' | 'today' | 'overdue' | 'new'>('all');
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Define the order of statuses
   const statusOrder: Record<LeadStatus, number> = {
-    'new': 1,
-    'contacted': 2,
-    'qualified': 3,
-    'proposal': 4,
-    'negotiation': 5,
-    'closed_won': 6,
-    'closed_lost': 7,
-    'warm': 8,
-    'WrongNumber': 9,
-    'NotAnswered': 10,
-    'CallBackLater': 11,
-    'Interested': 12,
-    'NotInterested': 13,
-    'SwitchedOff': 14
+    new: 1,
+    contacted: 2,
+    qualified: 3,
+    proposal: 4,
+    negotiation: 5,
+    closed_won: 6,
+    closed_lost: 7,
+    warm: 8,
+    WrongNumber: 9,
+    NotAnswered: 10,
+    CallBackLater: 11,
+    Interested: 12,
+    NotInterested: 13,
+    SwitchedOff: 14,
   };
 
   useEffect(() => {
     let isMounted = true;
 
     const fetchData = async () => {
+      if (!user) {
+        console.error('No authenticated user found');
+        toast.error('User authentication required');
+        setIsLoading(false);
+        return;
+      }
+
       setIsLoading(true);
       try {
+        // Fetch leads
         const leadsResponse = await fetch('https://crmbackend-lxbe.onrender.com/api/leads/getall');
         if (!leadsResponse.ok) throw new Error(`Failed to fetch leads: ${leadsResponse.status}`);
         const rawLeadsData = await leadsResponse.json();
 
+        // Filter leads for the logged-in BDA
         const leadsData: Lead[] = Array.isArray(rawLeadsData)
-          ? rawLeadsData.map((lead: any) => ({
-              id: String(lead.id),
-              name: lead.name || null,
-              phone: lead.contactNo || null,
-              email: lead.email || null,
-              industry: lead.industry || null,
-              companyName: lead.companyName || null,
-              city: lead.city || null,
-              state: lead.state || null,
-              status: (lead.status || 'new') as LeadStatus,
-              assignedBdaId: lead.assignedBdaId ? String(lead.assignedBdaId) : null,
-              assignedBdaName: lead.assignedTo || null,
-              followUpDate: lead.followUp || null,
-              intrests: lead.intrests || null,
-              remarks: lead.remarks || null,
-              actionStatus: lead.actionStatus || null,
-              actionTaken: lead.actionTaken || null,
-              createdAt: (typeof lead.createdAt === 'string' && lead.createdAt) ? lead.createdAt : new Date().toISOString(),
-              updatedAt: (typeof lead.lastUpdated === 'string' && lead.lastUpdated) ? lead.lastUpdated : new Date().toISOString(),
-              whatsappSent: lead.actionTaken?.includes('whatsapp') || false,
-              emailSent: lead.actionTaken?.includes('email') || false,
-              quotationSent: lead.actionTaken?.includes('quotation') || false,
-              sampleWorkSent: lead.actionTaken?.includes('sample') || false,
-              MeetingBooked: lead.actionTaken?.includes('MeetingBooked') || false,
-              DemoScheduled: lead.actionTaken?.includes('DemoScheduled') || false,
-              NeedMoreInfo: lead.actionTaken?.includes('NeedMoreInfo') || false,
-              WaitingForDecision: lead.actionTaken?.includes('WaitingForDecision') || false,
-            }))
-          : [];
-
-        if (isMounted) setLeads(leadsData);
-
-        const usersResponse = await fetch('https://crmbackend-lxbe.onrender.com/api/bda-users');
-        if (!usersResponse.ok) throw new Error(`Failed to fetch BDAs: ${usersResponse.status}`);
-        const usersData = await usersResponse.json();
-
-        const bdaUsers = Array.isArray(usersData)
-          ? usersData
-              .filter((user: any) => user.role === 'BDA')
-              .map((user: any) => ({
-                id: String(user.id),
-                name: user.name || '',
-                role: user.role as 'BDA' | 'admin',
+          ? rawLeadsData
+              .filter((lead: any) => {
+                if (!lead.assignedBdaId && !lead.assignedTo) return false;
+                const assignedBdaId = lead.assignedBdaId ? String(lead.assignedBdaId).trim().toLowerCase() : null;
+                const assignedBdaName = lead.assignedTo ? lead.assignedTo.trim().toLowerCase() : null;
+                const userId = user.id?.toString().trim().toLowerCase();
+                const userName = user.name?.trim().toLowerCase();
+                const match = assignedBdaId === userId || assignedBdaName === userName;
+                console.log(`Lead ID ${lead.id}: assignedBdaId=${assignedBdaId}, assignedTo=${assignedBdaName}, userId=${userId}, userName=${userName}, match=${match}`);
+                return match;
+              })
+              .map((lead: any) => ({
+                id: String(lead.id),
+                name: lead.name || null,
+                phone: lead.contactNo || null,
+                email: lead.email || null,
+                industry: lead.industry || null,
+                companyName: lead.companyName || null,
+                city: lead.city || null,
+                state: lead.state || null,
+                status: (lead.status || 'new') as LeadStatus,
+                assignedBdaId: lead.assignedBdaId ? String(lead.assignedBdaId) : null,
+                assignedBdaName: lead.assignedTo || null,
+                followUpDate: lead.followUp || null,
+                intrests: lead.intrests || null,
+                remarks: lead.remarks || null,
+                actionStatus: lead.actionStatus || null,
+                actionTaken: lead.actionTaken || null,
+                createdAt: (typeof lead.createdAt === 'string' && lead.createdAt) ? lead.createdAt : new Date().toISOString(),
+                updatedAt: (typeof lead.lastUpdated === 'string' && lead.lastUpdated) ? lead.lastUpdated : new Date().toISOString(),
+                whatsappSent: lead.actionTaken?.includes('whatsapp') || false,
+                emailSent: lead.actionTaken?.includes('email') || false,
+                quotationSent: lead.actionTaken?.includes('quotation') || false,
+                sampleWorkSent: lead.actionTaken?.includes('sample') || false,
+                MeetingBooked: lead.actionTaken?.includes('MeetingBooked') || false,
+                DemoScheduled: lead.actionTaken?.includes('DemoScheduled') || false,
+                NeedMoreInfo: lead.actionTaken?.includes('NeedMoreInfo') || false,
+                WaitingForDecision: lead.actionTaken?.includes('WaitingForDecision') || false,
               }))
           : [];
 
         if (isMounted) {
-          setBdaUsers(bdaUsers);
-          setBdaFetchError(bdaUsers.length === 0 ? 'No BDA users available' : null);
+          console.log('Filtered leads for BDA:', leadsData);
+          setLeads(leadsData);
         }
       } catch (err) {
         console.error('Error fetching data:', err);
-        if (isMounted) toast.error('Failed to load leads or BDAs');
+        if (isMounted) toast.error('Failed to load leads');
       } finally {
         if (isMounted) setIsLoading(false);
       }
@@ -141,7 +131,7 @@ const BdaLeads = () => {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [user]);
 
   const isValidDate = (dateString: string | null): boolean => {
     if (!dateString) return false;
@@ -163,15 +153,6 @@ const BdaLeads = () => {
   ).length;
   const newLeadsCount = leads.filter(lead => lead.status === 'new').length;
 
-  const toggleLeadSelection = (leadId: string) => {
-    setSelectedLeads(prev => {
-      const newSelection = new Set(prev);
-      if (newSelection.has(leadId)) newSelection.delete(leadId);
-      else newSelection.add(leadId);
-      return newSelection;
-    });
-  };
-
   const handleSort = (key: keyof Lead) => {
     if (sortBy === key) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -185,7 +166,6 @@ const BdaLeads = () => {
     setActiveCardFilter('all');
     setSearchTerm('');
     setStatusFilter('all');
-    setBdaFilter('all');
     setFiltersOpen(false);
   };
 
@@ -208,10 +188,7 @@ const BdaLeads = () => {
         (lead.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (lead.phone || '').includes(searchTerm);
       const matchesStatus = statusFilter === 'all' || lead.status === statusFilter;
-      const matchesBda =
-        bdaFilter === 'all' ||
-        (bdaFilter === 'unassigned' ? !lead.assignedBdaId : lead.assignedBdaId === bdaFilter);
-      return matchesCardFilter && matchesSearch && matchesStatus && matchesBda;
+      return matchesCardFilter && matchesSearch && matchesStatus;
     })
     .sort((a, b) => {
       // First sort by status using the predefined order
@@ -238,256 +215,11 @@ const BdaLeads = () => {
     setIsModalOpen(true);
   };
 
-  const handleAssignLeads = async () => {
-    if (!selectedBdaForAssignment || selectedLeads.size === 0) {
-      toast.error('Please select a BDA and at least one lead');
-      return;
-    }
-
-    const selectedBda = bdaUsers.find(bda => bda.id === selectedBdaForAssignment);
-    if (!selectedBda) {
-      toast.error('Invalid BDA selected');
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const response = await fetch('https://crmbackend-lxbe.onrender.com/api/leads/assign', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          leadIds: Array.from(selectedLeads).map(id => parseInt(id)),
-          bdaId: parseInt(selectedBda.id),
-          bdaName: selectedBda.name,
-        }),
-      });
-
-      if (!response.ok) throw new Error('Failed to assign leads');
-
-      setLeads(leads =>
-        leads.map(lead => {
-          const updatedLead = selectedLeads.has(lead.id)
-            ? {
-                ...lead,
-                assignedBdaId: selectedBda.id,
-                assignedBdaName: selectedBda.name,
-                updatedAt: new Date().toISOString(),
-              }
-            : lead;
-          // Ensure createdAt and updatedAt are strings for the new state
-          return {
-            ...updatedLead,
-            createdAt: typeof updatedLead.createdAt === 'string' ? updatedLead.createdAt : new Date().toISOString(),
-            updatedAt: typeof updatedLead.updatedAt === 'string' ? updatedLead.updatedAt : new Date().toISOString(),
-          };
-        })
-      );
-
-      setSelectedLeads(new Set());
-      setIsAssigningLeads(false);
-      setSelectedBdaForAssignment('');
-      toast.success(`${selectedLeads.size} leads assigned to ${selectedBda.name}`);
-    } catch (err) {
-      console.error('Error assigning leads:', err);
-      toast.error('Failed to assign leads');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleImportCSV = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const formData = new FormData();
-    formData.append('file', file);
-
-    setIsLoading(true);
-    try {
-      const response = await fetch('https://crmbackend-lxbe.onrender.com/api/leads/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) throw new Error('Failed to upload CSV');
-
-      const message = await response.text();
-      toast.success(message);
-
-      const leadsResponse = await fetch('https://crmbackend-lxbe.onrender.com/api/leads/getall');
-      if (!leadsResponse.ok) throw new Error('Failed to fetch updated leads');
-      const rawLeadsData = await leadsResponse.json();
-
-      const newLeads: Lead[] = Array.isArray(rawLeadsData)
-        ? rawLeadsData.map((lead: any) => ({
-            id: String(lead.id),
-            name: lead.name || null,
-            phone: lead.contactNo || null,
-            email: lead.email || null,
-            industry: lead.industry || null,
-            companyName: lead.companyName || null,
-            city: lead.city || null,
-            state: lead.state || null,
-            status: (lead.status || 'new') as LeadStatus,
-            assignedBdaId: lead.assignedBdaId ? String(lead.assignedBdaId) : null,
-            assignedBdaName: lead.assignedTo || null,
-            followUpDate: lead.followUp || null,
-            intrests: lead.intrests || null,
-            remarks: lead.remarks || null,
-            actionStatus: lead.actionStatus || null,
-            actionTaken: lead.actionTaken || null,
-            createdAt: (typeof lead.createdAt === 'string' && lead.createdAt) ? lead.createdAt : new Date().toISOString(),
-            updatedAt: (typeof lead.lastUpdated === 'string' && lead.lastUpdated) ? lead.lastUpdated : new Date().toISOString(),
-            whatsappSent: lead.actionTaken?.includes('whatsapp') || false,
-            emailSent: lead.actionTaken?.includes('email') || false,
-            quotationSent: lead.actionTaken?.includes('quotation') || false,
-            sampleWorkSent: lead.actionTaken?.includes('sample') || false,
-            MeetingBooked: lead.actionTaken?.includes('MeetingBooked') || false,
-            DemoScheduled: lead.actionTaken?.includes('DemoScheduled') || false,
-            NeedMoreInfo: lead.actionTaken?.includes('NeedMoreInfo') || false,
-            WaitingForDecision: lead.actionTaken?.includes('WaitingForDecision') || false,
-          }))
-        : [];
-
-      setLeads(newLeads);
-    } catch (err) {
-      console.error('Error importing CSV:', err);
-      toast.error('Failed to upload CSV');
-    } finally {
-      setIsLoading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
-
-  const handleExportCSV = () => {
-    const exportData = filteredLeads.map(lead => ({
-      Id: lead.id,
-      Name: lead.name || '',
-      ContactNo: lead.phone || '',
-      Email: lead.email || '',
-      Status: lead.status,
-      ActionStatus: lead.actionStatus || '',
-      AssignedTo: lead.assignedBdaName || 'Unassigned',
-      Intrests: lead.intrests || '',
-      Remarks: lead.remarks || '',
-      ActionTaken: lead.actionTaken || '',
-      CompanyName: lead.companyName || '',
-      Industry: lead.industry || '',
-      City: lead.city || '',
-      State: lead.state || '',
-      FollowUp: lead.followUpDate || '',
-      LastUpdated: lead.updatedAt,
-    }));
-
-    const csv = Papa.unparse(exportData, { quotes: true });
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `leads_export_${format(new Date(), 'yyyy-MM-dd')}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    toast.success('Leads exported successfully');
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
         <h1 className="text-2xl font-semibold text-slate-800">Leads Management</h1>
-        <div className="flex flex-wrap gap-2">
-          {/* Remove Assign Leads Button */}
-          {/* <button
-            onClick={() => setIsAssigningLeads(!isAssigningLeads)}
-            disabled={isLoading}
-            className={`px-3 py-2 text-sm font-medium rounded-md flex items-center ${
-              isAssigningLeads
-                ? 'bg-indigo-100 text-indigo-700'
-                : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50'
-            }`}
-          >
-            <UserPlus className="h-4 w-4 mr-1.5" />
-            Assign Leads
-          </button> */}
-          {/* Remove Import CSV Button */}
-          {/* <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isLoading}
-            className="px-3 py-2 text-sm font-medium rounded-md bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 flex items-center disabled:opacity-50"
-          >
-            <Upload className="h-4 w-4 mr-1.5" />
-            Import CSV
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleImportCSV}
-              accept=".csv"
-              className="hidden"
-            />
-          </button> */}
-          {/* Remove Export CSV Button */}
-          {/* <button
-            onClick={handleExportCSV}
-            disabled={isLoading}
-            className="px-3 py-2 text-sm font-medium rounded-md bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 flex items-center disabled:opacity-50"
-          >
-            <Download className="h-4 w-4 mr-1.5" />
-            Export CSV
-          </button> */}
-        </div>
       </div>
-
-      {isAssigningLeads && (
-        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
-            <div>
-              <h3 className="font-medium text-indigo-700">Assign Leads to BDA</h3>
-              <p className="text-sm text-indigo-600">Selected: {selectedLeads.size} leads</p>
-            </div>
-            <div className="flex items-center space-x-2">
-              {bdaFetchError ? (
-                <p className="text-sm text-red-600">{bdaFetchError}</p>
-              ) : bdaUsers.length === 0 ? (
-                <p className="text-sm text-slate-500">No BDA users available</p>
-              ) : (
-                <select
-                  value={selectedBdaForAssignment}
-                  onChange={e => setSelectedBdaForAssignment(e.target.value)}
-                  className="block w-48 rounded-md border-slate-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 text-sm"
-                  disabled={isLoading}
-                >
-                  <option value="">Select BDA</option>
-                  {bdaUsers.map(bda => (
-                    <option key={bda.id} value={bda.id}>
-                      {bda.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-              <button
-                onClick={handleAssignLeads}
-                disabled={!selectedBdaForAssignment || selectedLeads.size === 0 || isLoading || bdaUsers.length === 0}
-                className="px-3 py-2 text-sm font-medium rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-indigo-300 flex items-center"
-              >
-                <Check className="h-4 w-4 mr-1.5" />
-                Assign
-              </button>
-              <button
-                onClick={() => {
-                  setIsAssigningLeads(false);
-                  setSelectedLeads(new Set());
-                  setSelectedBdaForAssignment('');
-                }}
-                className="p-2 text-slate-500 hover:text-slate-700 rounded-md"
-                disabled={isLoading}
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Filter Cards Section with Clickable Filters and Updated Icons */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -516,7 +248,7 @@ const BdaLeads = () => {
           }`}
         >
           <div className="p-2 bg-yellow-100 rounded-full">
-            <Calendar className="h-6 w-6 text-yellow-600" />
+            <Users className="h-6 w-6 text-yellow-600" />
           </div>
           <div>
             <h3 className="text-sm font-medium text-yellow-800">Today's Follow-ups</h3>
@@ -593,7 +325,7 @@ const BdaLeads = () => {
       </div>
 
       {filtersOpen && (
-        <div className="bg-white border border-slate-200 rounded-lg p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="bg-white border border-slate-200 rounded-lg p-4">
           <div>
             <label htmlFor="status-filter" className="block text-sm font-medium text-slate-700 mb-1">
               Status
@@ -622,26 +354,6 @@ const BdaLeads = () => {
               <option value="SwitchedOff">Switched Off</option>
             </select>
           </div>
-          <div>
-            <label htmlFor="bda-filter" className="block text-sm font-medium text-slate-700 mb-1">
-              Assigned BDA
-            </label>
-            <select
-              id="bda-filter"
-              value={bdaFilter}
-              onChange={e => setBdaFilter(e.target.value)}
-              className="block w-full rounded-md border-slate-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50 text-sm"
-              disabled={isLoading}
-            >
-              <option value="all">All BDAs</option>
-              <option value="unassigned">Unassigned</option>
-              {bdaUsers.map(bda => (
-                <option key={bda.id} value={bda.id}>
-                  {bda.name}
-                </option>
-              ))}
-            </select>
-          </div>
         </div>
       )}
 
@@ -653,33 +365,15 @@ const BdaLeads = () => {
             <table className="min-w-full divide-y divide-slate-200">
               <thead className="bg-slate-50">
                 <tr>
-                  {isAssigningLeads && (
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider w-10"
-                    >
-                      <input
-                        type="checkbox"
-                        className="rounded border-slate-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
-                        checked={selectedLeads.size === filteredLeads.length && filteredLeads.length > 0}
-                        onChange={e => {
-                          if (e.target.checked) {
-                            setSelectedLeads(new Set(filteredLeads.map(lead => lead.id)));
-                          } else {
-                            setSelectedLeads(new Set());
-                          }
-                        }}
-                      />
-                    </th>
-                  )}
-                 <th
-                  scope="col"
-                  className="uppercase tracking-wider cursor-pointer"
-                  onClick={() => handleSort('name')}
-                          >
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer"
+                    onClick={() => handleSort('name')}
+                  >
+                    <div className="flex items-center">
                       Name
                       <ArrowUpDown className="h-4 w-4 ml-1" />
-                    
+                    </div>
                   </th>
                   <th
                     scope="col"
@@ -733,10 +427,10 @@ const BdaLeads = () => {
                 {filteredLeads.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={isAssigningLeads ? 7 : 6}
+                      colSpan={6}
                       className="px-6 py-4 text-center text-sm text-gray-500"
                     >
-                      No leads found. Try adjusting your filters.
+                      No leads found. Try adjusting your filters or contact your admin.
                     </td>
                   </tr>
                 ) : (
@@ -744,24 +438,8 @@ const BdaLeads = () => {
                     <tr
                       key={lead.id}
                       className="hover:bg-gray-50 cursor-pointer"
-                      onClick={() => {
-                        if (isAssigningLeads) {
-                          toggleLeadSelection(lead.id);
-                        } else {
-                          handleOpenLeadModal(lead);
-                        }
-                      }}
+                      onClick={() => handleOpenLeadModal(lead)}
                     >
-                      {isAssigningLeads && (
-                        <td className="px-6 py-4 whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                          <input
-                            type="checkbox"
-                            className="cursor-pointer rounded-md border-gray-400 text-blue-600 focus:shadow-outline focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
-                            checked={selectedLeads.has(lead.id)}
-                            onChange={() => toggleLeadSelection(lead.id)}
-                          />
-                        </td>
-                      )}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">{lead.name || 'N/A'}</div>
                         <div className="text-sm text-gray-500">{lead.industry || 'N/A'}</div>
@@ -905,35 +583,44 @@ const BdaLeads = () => {
 
               const rawLeads = await leadsResponse.json();
               const updatedLeads: Lead[] = Array.isArray(rawLeads)
-                ? rawLeads.map((lead: any) => ({
-                    id: String(lead.id),
-                    name: lead.name || null,
-                    phone: lead.contactNo || null,
-                    email: lead.email || null,
-                    industry: lead.industry || null,
-                    companyName: lead.companyName || null,
-                    city: lead.city || null,
-                    state: lead.state || null,
-                    status: (lead.status || 'new') as LeadStatus,
-                    assignedBdaId: lead.assignedBdaId ? String(lead.assignedBdaId) : null,
-                    assignedBdaName: lead.assignedTo || null,
-                    followUpDate: lead.followUp || null,
-                    intrests: lead.intrests || null,
-                    remarks: lead.remarks || null,
-                    actionStatus: lead.actionStatus || null,
-                    actionTaken: lead.actionTaken || null,
-                    createdAt: (typeof lead.createdAt === 'string' && lead.createdAt) ? lead.createdAt : new Date().toISOString(),
-                    updatedAt: (typeof lead.lastUpdated === 'string' && lead.lastUpdated) ? lead.lastUpdated : new Date().toISOString(),
-                    lastUpdated: (typeof lead.lastUpdated === 'string' && lead.lastUpdated) ? lead.lastUpdated : new Date().toISOString(),
-                    whatsappSent: lead.actionTaken?.includes('whatsapp') || false,
-                    emailSent: lead.actionTaken?.includes('email') || false,
-                    quotationSent: lead.actionTaken?.includes('quotation') || false,
-                    sampleWorkSent: lead.actionTaken?.includes('sample') || false,
-                    MeetingBooked: lead.actionTaken?.includes('MeetingBooked') || false,
-                    DemoScheduled: lead.actionTaken?.includes('DemoScheduled') || false,
-                    NeedMoreInfo: lead.actionTaken?.includes('NeedMoreInfo') || false,
-                    WaitingForDecision: lead.actionTaken?.includes('WaitingForDecision') || false,
-                  }))
+                ? rawLeads
+                    .filter((lead: any) => {
+                      if (!lead.assignedBdaId && !lead.assignedTo) return false;
+                      const assignedBdaId = lead.assignedBdaId ? String(lead.assignedBdaId).trim().toLowerCase() : null;
+                      const assignedBdaName = lead.assignedTo ? lead.assignedTo.trim().toLowerCase() : null;
+                      const userId = user?.id?.toString().trim().toLowerCase();
+                      const userName = user?.name?.trim().toLowerCase();
+                      const match = assignedBdaId === userId || assignedBdaName === userName;
+                      return match;
+                    })
+                    .map((lead: any) => ({
+                      id: String(lead.id),
+                      name: lead.name || null,
+                      phone: lead.contactNo || null,
+                      email: lead.email || null,
+                      industry: lead.industry || null,
+                      companyName: lead.companyName || null,
+                      city: lead.city || null,
+                      state: lead.state || null,
+                      status: (lead.status || 'new') as LeadStatus,
+                      assignedBdaId: lead.assignedBdaId ? String(lead.assignedBdaId) : null,
+                      assignedBdaName: lead.assignedTo || null,
+                      followUpDate: lead.followUp || null,
+                      intrests: lead.intrests || null,
+                      remarks: lead.remarks || null,
+                      actionStatus: lead.actionStatus || null,
+                      actionTaken: lead.actionTaken || null,
+                      createdAt: (typeof lead.createdAt === 'string' && lead.createdAt) ? lead.createdAt : new Date().toISOString(),
+                      updatedAt: (typeof lead.lastUpdated === 'string' && lead.lastUpdated) ? lead.lastUpdated : new Date().toISOString(),
+                      whatsappSent: lead.actionTaken?.includes('whatsapp') || false,
+                      emailSent: lead.actionTaken?.includes('email') || false,
+                      quotationSent: lead.actionTaken?.includes('quotation') || false,
+                      sampleWorkSent: lead.actionTaken?.includes('sample') || false,
+                      MeetingBooked: lead.actionTaken?.includes('MeetingBooked') || false,
+                      DemoScheduled: lead.actionTaken?.includes('DemoScheduled') || false,
+                      NeedMoreInfo: lead.actionTaken?.includes('NeedMoreInfo') || false,
+                      WaitingForDecision: lead.actionTaken?.includes('WaitingForDecision') || false,
+                    }))
                 : [];
 
               setLeads(updatedLeads);
