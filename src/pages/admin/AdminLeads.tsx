@@ -11,7 +11,12 @@ import {
   ChevronDown,
   ChevronUp,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Users,
+  Calendar,
+  Clock,
+  Star,
+  XCircle,
 } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
 import { toast } from 'react-hot-toast';
@@ -84,6 +89,7 @@ const AdminLeads = () => {
   const [bdaFetchError, setBdaFetchError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const leadsPerPage = 50;
+  const [activeCardFilter, setActiveCardFilter] = useState<'all' | 'today' | 'overdue' | 'new'>('all');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -161,6 +167,26 @@ const AdminLeads = () => {
     };
   }, []);
 
+  const isValidDate = (dateString: string | null): boolean => {
+    if (!dateString) return false;
+    try {
+      return isValid(parseISO(dateString));
+    } catch {
+      return false;
+    }
+  };
+
+  // Calculate counts for the filter cards
+  const today = format(new Date(), 'yyyy-MM-dd');
+  const allLeadsCount = leads.length;
+  const todaysFollowUpsCount = leads.filter(lead => 
+    lead.followUpDate && format(new Date(lead.followUpDate), 'yyyy-MM-dd') === today
+  ).length;
+  const overdueFollowUpsCount = leads.filter(lead => 
+    lead.followUpDate && new Date(lead.followUpDate) < new Date() && format(new Date(lead.followUpDate), 'yyyy-MM-dd') !== today
+  ).length;
+  const newLeadsCount = leads.filter(lead => lead.status === 'new').length;
+
   const toggleLeadSelection = (leadId: string) => {
     setSelectedLeads(prev => {
       const newSelection = new Set(prev);
@@ -177,6 +203,14 @@ const AdminLeads = () => {
       setSortBy(key);
       setSortDirection('asc');
     }
+  };
+
+  const handleClearFilters = () => {
+    setActiveCardFilter('all');
+    setSearchTerm('');
+    setStatusFilter('all');
+    setBdaFilter('all');
+    setFiltersOpen(false);
   };
 
   useEffect(() => {
@@ -208,6 +242,18 @@ const AdminLeads = () => {
 
   const filteredLeads = leads
     .filter(lead => {
+      // Apply card filter
+      let matchesCardFilter = true;
+      if (activeCardFilter === 'today') {
+        matchesCardFilter = lead.followUpDate && format(new Date(lead.followUpDate), 'yyyy-MM-dd') === today;
+      } else if (activeCardFilter === 'overdue') {
+        matchesCardFilter = lead.followUpDate && new Date(lead.followUpDate) < new Date() && format(new Date(lead.followUpDate), 'yyyy-MM-dd') !== today;
+      } else if (activeCardFilter === 'new') {
+        matchesCardFilter = lead.status === 'new';
+      } else {
+        matchesCardFilter = true; // 'all' filter shows all leads
+      }
+
       const matchesSearch =
         (lead.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (lead.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -216,7 +262,7 @@ const AdminLeads = () => {
       const matchesBda =
         bdaFilter === 'all' ||
         (bdaFilter === 'unassigned' ? !lead.assignedBdaId : lead.assignedBdaId === bdaFilter);
-      return matchesSearch && matchesStatus && matchesBda;
+      return matchesCardFilter && matchesSearch && matchesStatus && matchesBda;
     })
     .sort((a, b) => {
       // First sort by status using the predefined order
@@ -487,6 +533,74 @@ const AdminLeads = () => {
         </div>
       )}
 
+      {/* Filter Cards Section with Clickable Filters and Updated Icons */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div
+          onClick={() => setActiveCardFilter('all')}
+          className={`border rounded-lg p-4 flex items-center space-x-3 cursor-pointer transition-colors ${
+            activeCardFilter === 'all'
+              ? 'bg-blue-100 border-blue-300'
+              : 'bg-blue-50 border-blue-200 hover:bg-blue-100'
+          }`}
+        >
+          <div className="p-2 bg-blue-100 rounded-full">
+            <Users className="h-6 w-6 text-blue-600" />
+          </div>
+          <div>
+            <h3 className="text-sm font-medium text-blue-800">All Leads</h3>
+            <p className="text-2xl font-semibold text-blue-900">{allLeadsCount}</p>
+          </div>
+        </div>
+        <div
+          onClick={() => setActiveCardFilter('today')}
+          className={`border rounded-lg p-4 flex items-center space-x-3 cursor-pointer transition-colors ${
+            activeCardFilter === 'today'
+              ? 'bg-yellow-100 border-yellow-300'
+              : 'bg-yellow-50 border-yellow-200 hover:bg-yellow-100'
+          }`}
+        >
+          <div className="p-2 bg-yellow-100 rounded-full">
+            <Calendar className="h-6 w-6 text-yellow-600" />
+          </div>
+          <div>
+            <h3 className="text-sm font-medium text-yellow-800">Today's Follow-ups</h3>
+            <p className="text-2xl font-semibold text-yellow-900">{todaysFollowUpsCount}</p>
+          </div>
+        </div>
+        <div
+          onClick={() => setActiveCardFilter('overdue')}
+          className={`border rounded-lg p-4 flex items-center space-x-3 cursor-pointer transition-colors ${
+            activeCardFilter === 'overdue'
+              ? 'bg-red-100 border-red-300'
+              : 'bg-red-50 border-red-200 hover:bg-red-100'
+          }`}
+        >
+          <div className="p-2 bg-red-100 rounded-full">
+            <Clock className="h-6 w-6 text-red-600" />
+          </div>
+          <div>
+            <h3 className="text-sm font-medium text-red-800">Overdue Follow-ups</h3>
+            <p className="text-2xl font-semibold text-red-900">{overdueFollowUpsCount}</p>
+          </div>
+        </div>
+        <div
+          onClick={() => setActiveCardFilter('new')}
+          className={`border rounded-lg p-4 flex items-center space-x-3 cursor-pointer transition-colors ${
+            activeCardFilter === 'new'
+              ? 'bg-green-100 border-green-300'
+              : 'bg-green-50 border-green-200 hover:bg-green-100'
+          }`}
+        >
+          <div className="p-2 bg-green-100 rounded-full">
+            <Star className="h-6 w-6 text-green-600" />
+          </div>
+          <div>
+            <h3 className="text-sm font-medium text-green-800">New Leads</h3>
+            <p className="text-2xl font-semibold text-green-900">{newLeadsCount}</p>
+          </div>
+        </div>
+      </div>
+
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-4 sm:space-y-0">
         <div className="relative w-full sm:w-64">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -501,15 +615,25 @@ const AdminLeads = () => {
             disabled={isLoading}
           />
         </div>
-        <button
-          onClick={() => setFiltersOpen(!filtersOpen)}
-          className="px-3 py-2 text-sm font-medium rounded-md bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 flex items-center sm:w-auto w-full justify-center disabled:opacity-50"
-          disabled={isLoading}
-        >
-          <Filter className="h-4 w-4 mr-1.5" />
-          Filter
-          {filtersOpen ? <ChevronUp className="h-4 w-4 ml-1.5" /> : <ChevronDown className="h-4 w-4 ml-1.5" />}
-        </button>
+        <div className="flex space-x-2">
+          <button
+            onClick={() => setFiltersOpen(!filtersOpen)}
+            className="px-3 py-2 text-sm font-medium rounded-md bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 flex items-center sm:w-auto w-full justify-center disabled:opacity-50"
+            disabled={isLoading}
+          >
+            <Filter className="h-4 w-4 mr-1.5" />
+            Filter
+            {filtersOpen ? <ChevronUp className="h-4 w-4 ml-1.5" /> : <ChevronDown className="h-4 w-4 ml-1.5" />}
+          </button>
+          <button
+            onClick={handleClearFilters}
+            className="px-3 py-2 text-sm font-medium rounded-md bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 flex items-center sm:w-auto w-full justify-center disabled:opacity-50"
+            disabled={isLoading}
+          >
+            <XCircle className="h-4 w-4 mr-1.5" />
+            Clear Filter
+          </button>
+        </div>
       </div>
 
       {filtersOpen && (
@@ -581,10 +705,10 @@ const AdminLeads = () => {
                       <input
                         type="checkbox"
                         className="rounded border-slate-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
-                        checked={selectedLeads.size === filteredLeads.length && filteredLeads.length > 0}
+                        checked={selectedLeads.size === paginatedLeads.length && paginatedLeads.length > 0}
                         onChange={e => {
                           if (e.target.checked) {
-                            setSelectedLeads(new Set(filteredLeads.map(lead => lead.id)));
+                            setSelectedLeads(new Set(paginatedLeads.map(lead => lead.id)));
                           } else {
                             setSelectedLeads(new Set());
                           }
@@ -651,100 +775,111 @@ const AdminLeads = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-slate-200">
-                {paginatedLeads.map(lead => (
-                  <tr
-                    key={lead.id}
-                    className="hover:bg-slate-50 cursor-pointer"
-                    onClick={() => {
-                      if (isAssigningLeads) {
-                        toggleLeadSelection(lead.id);
-                      } else {
-                        handleOpenLeadModal(lead);
-                      }
-                    }}
-                  >
-                    {isAssigningLeads && (
-                      <td
-                        className="px-6 py-4 whitespace-nowrap"
-                        onClick={e => e.stopPropagation()}
-                      >
-                        <input
-                          type="checkbox"
-                          className="rounded border-slate-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
-                          checked={selectedLeads.has(lead.id)}
-                          onChange={() => toggleLeadSelection(lead.id)}
-                        />
-                      </td>
-                    )}
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-slate-800">{lead.name || 'N/A'}</div>
-                      <div className="text-sm text-slate-500">{lead.industry || 'N/A'}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-slate-800">{lead.phone || 'N/A'}</div>
-                      <div className="text-sm text-slate-500">{lead.email || 'N/A'}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
-                          lead.status === 'new'
-                            ? 'bg-blue-100 text-blue-800'
-                            : lead.status === 'contacted'
-                            ? 'bg-green-100 text-green-800'
-                            : lead.status === 'qualified'
-                            ? 'bg-purple-100 text-purple-800'
-                            : lead.status === 'proposal'
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : lead.status === 'negotiation'
-                            ? 'bg-orange-100 text-orange-800'
-                            : lead.status === 'closed_won'
-                            ? 'bg-green-600 text-white'
-                            : lead.status === 'closed_lost'
-                            ? 'bg-red-100 text-red-800'
-                            : lead.status === 'warm'
-                            ? 'bg-amber-100 text-amber-800'
-                            : lead.status === 'WrongNumber'
-                            ? 'bg-red-100 text-red-800'
-                            : lead.status === 'NotAnswered'
-                            ? 'bg-gray-100 text-gray-800'
-                            : lead.status === 'CallBackLater'
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : lead.status === 'Interested'
-                            ? 'bg-green-100 text-green-800'
-                            : lead.status === 'NotInterested'
-                            ? 'bg-red-100 text-red-800'
-                            : lead.status === 'SwitchedOff'
-                            ? 'bg-gray-100 text-gray-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}
-                      >
-                        {lead.status.charAt(0).toUpperCase() + lead.status.slice(1).toLowerCase()}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-slate-800">{lead.assignedBdaName || 'Unassigned'}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div
-                        className={`text-sm ${
-                          lead.followUpDate &&
-                          new Date(lead.followUpDate) < new Date() &&
-                          formatDate(lead.followUpDate, 'yyyy-MM-dd') !== format(new Date(), 'yyyy-MM-dd')
-                            ? 'text-red-600 font-medium'
-                            : lead.followUpDate &&
-                              formatDate(lead.followUpDate, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd')
-                            ? 'text-amber-600 font-medium'
-                            : 'text-slate-800'
-                        }`}
-                      >
-                        {lead.followUpDate ? formatDate(lead.followUpDate) : 'Not scheduled'}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-slate-500">{formatDate(lead.updatedAt, 'MMM d, yyyy h:mm a')}</div>
+                {paginatedLeads.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={isAssigningLeads ? 7 : 6}
+                      className="px-6 py-4 text-center text-sm text-slate-500"
+                    >
+                      No leads found. Try adjusting your filters.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  paginatedLeads.map(lead => (
+                    <tr
+                      key={lead.id}
+                      className="hover:bg-slate-50 cursor-pointer"
+                      onClick={() => {
+                        if (isAssigningLeads) {
+                          toggleLeadSelection(lead.id);
+                        } else {
+                          handleOpenLeadModal(lead);
+                        }
+                      }}
+                    >
+                      {isAssigningLeads && (
+                        <td
+                          className="px-6 py-4 whitespace-nowrap"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <input
+                            type="checkbox"
+                            className="rounded border-slate-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                            checked={selectedLeads.has(lead.id)}
+                            onChange={() => toggleLeadSelection(lead.id)}
+                          />
+                        </td>
+                      )}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-slate-800">{lead.name || 'N/A'}</div>
+                        <div className="text-sm text-slate-500">{lead.industry || 'N/A'}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-slate-800">{lead.phone || 'N/A'}</div>
+                        <div className="text-sm text-slate-500">{lead.email || 'N/A'}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span
+                          className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+                            lead.status === 'new'
+                              ? 'bg-blue-100 text-blue-800'
+                              : lead.status === 'contacted'
+                              ? 'bg-green-100 text-green-800'
+                              : lead.status === 'qualified'
+                              ? 'bg-purple-100 text-purple-800'
+                              : lead.status === 'proposal'
+                              ? 'bg-yellow-100 text-yellow-800'
+                              : lead.status === 'negotiation'
+                              ? 'bg-orange-100 text-orange-800'
+                              : lead.status === 'closed_won'
+                              ? 'bg-green-600 text-white'
+                              : lead.status === 'closed_lost'
+                              ? 'bg-red-100 text-red-800'
+                              : lead.status === 'warm'
+                              ? 'bg-amber-100 text-amber-800'
+                              : lead.status === 'WrongNumber'
+                              ? 'bg-red-100 text-red-800'
+                              : lead.status === 'NotAnswered'
+                              ? 'bg-gray-100 text-gray-800'
+                              : lead.status === 'CallBackLater'
+                              ? 'bg-yellow-100 text-yellow-800'
+                              : lead.status === 'Interested'
+                              ? 'bg-green-100 text-green-800'
+                              : lead.status === 'NotInterested'
+                              ? 'bg-red-100 text-red-800'
+                              : lead.status === 'SwitchedOff'
+                              ? 'bg-gray-100 text-gray-800'
+                              : 'bg-gray-100 text-gray-800'
+                          }`}
+                        >
+                          {lead.status.charAt(0).toUpperCase() + lead.status.slice(1).toLowerCase()}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-slate-800">{lead.assignedBdaName || 'Unassigned'}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div
+                          className={`text-sm ${
+                            lead.followUpDate &&
+                            new Date(lead.followUpDate) < new Date() &&
+                            formatDate(lead.followUpDate, 'yyyy-MM-dd') !== format(new Date(), 'yyyy-MM-dd')
+                              ? 'text-red-600 font-medium'
+                              : lead.followUpDate &&
+                                formatDate(lead.followUpDate, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd')
+                              ? 'text-amber-600 font-medium'
+                              : 'text-slate-800'
+                          }`}
+                        >
+                          {lead.followUpDate ? formatDate(lead.followUpDate) : 'Not scheduled'}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-slate-500">{formatDate(lead.updatedAt, 'MMM d, yyyy h:mm a')}</div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

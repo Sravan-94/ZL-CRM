@@ -2,19 +2,63 @@ import { useState, useEffect } from 'react';
 import { DayPicker } from 'react-day-picker';
 import { format, isToday, isSameDay, isSameMonth, isBefore, parseISO } from 'date-fns';
 import { CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
-import { generateCalendarEvents, mockLeads } from '../../data/mockData';
 import LeadModal from '../../components/leads/LeadModal';
 import { toast } from 'react-hot-toast';
 import 'react-day-picker/dist/style.css';
-import { Lead } from '../../types';
+import { Lead, LeadStatus } from '../../types/lead';
 
 const AdminCalendar = () => {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [calendarEvents, setCalendarEvents] = useState(generateCalendarEvents());
-  const [leads, setLeads] = useState(mockLeads);
+  const [leads, setLeads] = useState<Lead[]>([]);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [filteredBda, setFilteredBda] = useState<string>('all');
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // Fetch leads from API
+  useEffect(() => {
+    const fetchLeads = async () => {
+      try {
+        const response = await fetch('https://crmbackend-lxbe.onrender.com/api/leads/getall');
+        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+        const data = await response.json();
+        
+        const formattedLeads: Lead[] = data.map((lead: any) => ({
+          id: String(lead.id),
+          name: lead.name || null,
+          phone: lead.contactNo || null,
+          email: lead.email || null,
+          industry: lead.industry || null,
+          companyName: lead.companyName || null,
+          city: lead.city || null,
+          state: lead.state || null,
+          status: (lead.status || 'new') as LeadStatus,
+          assignedBdaId: lead.assignedBdaId ? String(lead.assignedBdaId) : null,
+          assignedBdaName: lead.assignedTo || null,
+          followUpDate: lead.followUp || null,
+          intrests: lead.intrests || null,
+          remarks: lead.remarks || null,
+          actionStatus: lead.actionStatus || null,
+          actionTaken: lead.actionTaken || null,
+          createdAt: lead.createdAt || new Date().toISOString(),
+          updatedAt: lead.lastUpdated || new Date().toISOString(),
+          whatsappSent: lead.actionTaken?.includes('whatsapp') || false,
+          emailSent: lead.actionTaken?.includes('email') || false,
+          quotationSent: lead.actionTaken?.includes('quotation') || false,
+          sampleWorkSent: lead.actionTaken?.includes('sample') || false,
+        }));
+        
+        setLeads(formattedLeads);
+      } catch (error) {
+        console.error('Error fetching leads:', error);
+        toast.error('Failed to fetch leads');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchLeads();
+  }, []);
   
   const bdaUsers = leads
     .map(lead => lead.assignedBdaName)
@@ -22,21 +66,28 @@ const AdminCalendar = () => {
   
   // Get events for selected date
   const getEventsForSelectedDate = () => {
-    return calendarEvents
-      .filter(event => isSameDay(event.date, selectedDate))
-      .filter(event => {
+    console.log('Selected date:', selectedDate);
+    const events = leads
+      .filter(lead => {
+        console.log('Lead followUpDate:', lead.followUpDate);
+        return lead.followUpDate && isSameDay(parseISO(lead.followUpDate), selectedDate);
+      })
+      .filter(lead => {
         if (filteredBda === 'all') return true;
-        const lead = leads.find(l => l.id === event.leadId);
-        return lead?.assignedBdaName === filteredBda;
-      });
+        return lead.assignedBdaName === filteredBda;
+      })
+      .map(lead => ({
+        id: lead.id,
+        title: lead.name || 'Unknown Lead',
+        date: parseISO(lead.followUpDate!),
+        status: isBefore(parseISO(lead.followUpDate!), new Date()) ? 'overdue' : 'upcoming',
+        leadId: lead.id,
+      }));
+    console.log('Filtered events:', events);
+    return events;
   };
   
   const selectedDateEvents = getEventsForSelectedDate();
-  
-  // Update events when leads change
-  useEffect(() => {
-    setCalendarEvents(generateCalendarEvents());
-  }, [leads]);
   
   // Handle opening lead modal
   const handleOpenLeadModal = (leadId: string) => {
@@ -60,17 +111,16 @@ const AdminCalendar = () => {
   
   // Custom day renderer for calendar
   const renderDay = (day: Date) => {
-    const dayEvents = calendarEvents
-      .filter(event => isSameDay(event.date, day))
-      .filter(event => {
+    const dayEvents = leads
+      .filter(lead => lead.followUpDate && isSameDay(parseISO(lead.followUpDate), day))
+      .filter(lead => {
         if (filteredBda === 'all') return true;
-        const lead = leads.find(l => l.id === event.leadId);
-        return lead?.assignedBdaName === filteredBda;
+        return lead.assignedBdaName === filteredBda;
       });
     
-    const hasPastEvents = dayEvents.some(event => event.status === 'overdue');
-    const hasTodayEvents = dayEvents.some(event => event.status === 'today');
-    const hasUpcomingEvents = dayEvents.some(event => event.status === 'upcoming');
+    const hasPastEvents = dayEvents.some(lead => isBefore(parseISO(lead.followUpDate!), new Date()));
+    const hasTodayEvents = dayEvents.some(lead => isToday(parseISO(lead.followUpDate!)));
+    const hasUpcomingEvents = dayEvents.some(lead => !isBefore(parseISO(lead.followUpDate!), new Date()) && !isToday(parseISO(lead.followUpDate!)));
     
     const eventIndicatorColor = hasPastEvents 
       ? 'bg-red-500' 
@@ -92,6 +142,14 @@ const AdminCalendar = () => {
       </div>
     );
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-slate-500">Loading calendar data...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -117,13 +175,32 @@ const AdminCalendar = () => {
           <DayPicker
             mode="single"
             selected={selectedDate}
-            onSelect={(date) => date && setSelectedDate(date)}
+            onSelect={(date) => {
+              console.log('Date selected:', date);
+              if (date) setSelectedDate(date);
+            }}
             showOutsideDays
             className="w-full"
             components={{
               Day: ({ date, displayMonth }) => {
-                if (!isSameMonth(date, displayMonth)) return <div className="text-slate-300">{format(date, 'd')}</div>;
-                return renderDay(date);
+                if (!isSameMonth(date, displayMonth)) {
+                  return (
+                    <div 
+                      className="text-slate-300 cursor-pointer hover:bg-slate-100 rounded-lg"
+                      onClick={() => setSelectedDate(date)}
+                    >
+                      {format(date, 'd')}
+                    </div>
+                  );
+                }
+                return (
+                  <div 
+                    className="cursor-pointer hover:bg-slate-100 rounded-lg"
+                    onClick={() => setSelectedDate(date)}
+                  >
+                    {renderDay(date)}
+                  </div>
+                );
               }
             }}
             modifiersClassNames={{
@@ -272,15 +349,71 @@ const AdminCalendar = () => {
             setSelectedLead(null);
           }}
           lead={selectedLead}
-          onSave={(updatedLead) => {
-            // Update lead in the list
-            const updatedLeads = leads.map(lead => 
-              lead.id === updatedLead.id ? updatedLead : lead
-            );
-            setLeads(updatedLeads);
-            setIsModalOpen(false);
-            setSelectedLead(null);
-            toast.success('Lead updated successfully');
+          onSave={async (updatedLead) => {
+            try {
+              const response = await fetch(`https://crmbackend-lxbe.onrender.com/api/leads/update/${updatedLead.id}`, {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  name: updatedLead.name,
+                  contactNo: updatedLead.phone,
+                  email: updatedLead.email,
+                  status: updatedLead.status,
+                  actionStatus: updatedLead.actionStatus,
+                  assignedTo: updatedLead.assignedBdaName,
+                  intrests: updatedLead.intrests,
+                  remarks: updatedLead.remarks,
+                  actionTaken: updatedLead.actionTaken,
+                  followUp: updatedLead.followUpDate,
+                }),
+              });
+
+              if (!response.ok) {
+                throw new Error('Failed to update lead');
+              }
+
+              // Refresh leads after update
+              const leadsResponse = await fetch('https://crmbackend-lxbe.onrender.com/api/leads/getall');
+              if (!leadsResponse.ok) throw new Error('Failed to fetch updated leads');
+              const data = await leadsResponse.json();
+              
+              const formattedLeads: Lead[] = data.map((lead: any) => ({
+                id: String(lead.id),
+                name: lead.name || null,
+                phone: lead.contactNo || null,
+                email: lead.email || null,
+                industry: lead.industry || null,
+                companyName: lead.companyName || null,
+                city: lead.city || null,
+                state: lead.state || null,
+                status: (lead.status || 'new') as LeadStatus,
+                assignedBdaId: lead.assignedBdaId ? String(lead.assignedBdaId) : null,
+                assignedBdaName: lead.assignedTo || null,
+                followUpDate: lead.followUp || null,
+                intrests: lead.intrests || null,
+                remarks: lead.remarks || null,
+                actionStatus: lead.actionStatus || null,
+                actionTaken: lead.actionTaken || null,
+                createdAt: lead.createdAt || new Date().toISOString(),
+                updatedAt: lead.lastUpdated || new Date().toISOString(),
+                whatsappSent: lead.actionTaken?.includes('whatsapp') || false,
+                emailSent: lead.actionTaken?.includes('email') || false,
+                quotationSent: lead.actionTaken?.includes('quotation') || false,
+                sampleWorkSent: lead.actionTaken?.includes('sample') || false,
+              }));
+              
+              setLeads(formattedLeads);
+              setIsModalOpen(false);
+              setSelectedLead(null);
+              toast.success('Lead updated successfully');
+              return true;
+            } catch (error) {
+              console.error('Error updating lead:', error);
+              toast.error('Failed to update lead');
+              return false;
+            }
           }}
           readOnly={false}
         />
