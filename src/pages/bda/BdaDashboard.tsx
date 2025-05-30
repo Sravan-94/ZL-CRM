@@ -1,8 +1,12 @@
-import { useState, useEffect } from 'react';
-import { Calendar, Clock, CheckCircle2, Circle, Info } from 'lucide-react';
-import { generateCalendarEvents } from '../../data/mockData'; // Removed mockLeads since we use API
+import { useState, useEffect, useMemo } from "react";
+import { Calendar,
+  Clock,
+  CheckCircle2,
+  Circle,
+  Info } from 'lucide-react';
+import { generateCalendarEvents } from '../../data/mockData';
 import { useAuth } from '../../contexts/AuthContext';
-import { format, parseISO, isToday } from 'date-fns';
+import { format, parseISO, isToday, isValid } from 'date-fns';
 
 // Lead type based on provided data structure
 interface Lead {
@@ -24,7 +28,12 @@ const BdaDashboard = () => {
   const { user } = useAuth();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [calendarEvents, setCalendarEvents] = useState(generateCalendarEvents(user?.id));
-  const [error, setError] = useState<string | null>(null); // Added for error handling
+  const [error, setError] = useState<string | null>(null);
+  // New state for date filter
+  const [dateFilter, setDateFilter] = useState<{
+    startDate: string | null;
+    endDate: string | null;
+  }>({ startDate: null, endDate: null });
 
   // Fetch leads from API and filter based on user
   useEffect(() => {
@@ -134,6 +143,49 @@ const BdaDashboard = () => {
     }, {} as Record<string, number>);
   })();
 
+  // Helper function to determine the last action taken on a lead
+  const determineLastAction = (lead: Lead) => {
+    if (lead.actionTaken?.includes('quotation')) return 'Sent quotation';
+    if (lead.actionTaken?.includes('sample')) return 'Sent sample work';
+    if (lead.actionTaken?.includes('email')) return 'Sent email';
+    if (lead.actionTaken?.includes('whatsapp')) return 'Sent WhatsApp message';
+    return lead.actionTaken || 'Updated lead status';
+  };
+
+  // Modified to include date filter
+  const getRecentActivities = useMemo(() => {
+    return leads
+      .filter((lead) => {
+        if (!lead.lastUpdated) return false;
+        if (!dateFilter.startDate && !dateFilter.endDate) return true;
+
+        const updateDate = parseISO(lead.lastUpdated);
+        if (!isValid(updateDate)) return false;
+
+        const start = dateFilter.startDate ? new Date(dateFilter.startDate) : null;
+        const end = dateFilter.endDate ? new Date(dateFilter.endDate) : null;
+
+        if (start && end) {
+          end.setHours(23, 59, 59, 999); // Include entire end date
+          return updateDate >= start && updateDate <= end;
+        } else if (start) {
+          return updateDate >= start;
+        } else if (end) {
+          end.setHours(23, 59, 59, 999);
+          return updateDate <= end;
+        }
+
+        return true;
+      })
+      .sort((a, b) => new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime())
+      .slice(0, 10)
+      .map((lead) => ({
+        leadName: lead.name || 'Unknown Lead',
+        action: determineLastAction(lead),
+        timestamp: lead.lastUpdated,
+      }));
+  }, [leads, dateFilter]);
+
   const statsCards = [
     {
       title: 'Total Leads',
@@ -165,27 +217,18 @@ const BdaDashboard = () => {
     },
   ];
 
-  const getRecentActivities = () => {
-    return leads
-      .filter((lead) => lead.lastUpdated)
-      .sort((a, b) => new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime())
-      .slice(0, 10)
-      .map((lead) => ({
-        leadName: lead.name || 'Unknown Lead',
-        action: determineLastAction(lead),
-        timestamp: lead.lastUpdated,
-      }));
+  // Handle date filter changes
+  const handleDateFilterChange = (field: 'startDate' | 'endDate', value: string) => {
+    setDateFilter((prev) => ({
+      ...prev,
+      [field]: value || null,
+    }));
   };
 
-  const determineLastAction = (lead: Lead) => {
-    if (lead.actionTaken?.includes('quotation')) return 'Sent quotation';
-    if (lead.actionTaken?.includes('sample')) return 'Sent sample work';
-    if (lead.actionTaken?.includes('email')) return 'Sent email';
-    if (lead.actionTaken?.includes('whatsapp')) return 'Sent WhatsApp message';
-    return lead.actionTaken || 'Updated lead status';
+  // Clear date filter
+  const clearDateFilter = () => {
+    setDateFilter({ startDate: null, endDate: null });
   };
-
-  const recentActivities = getRecentActivities();
 
   return (
     <div className="space-y-6">
@@ -356,12 +399,42 @@ const BdaDashboard = () => {
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-slate-200">
-        <div className="px-6 py-4 border-b border-slate-200">
+        <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center">
           <h2 className="font-medium text-slate-800">Recent Activity</h2>
+          <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2">
+              <label className="text-sm text-slate-600">From:</label>
+              <input
+                type="date"
+                value={dateFilter.startDate || ''}
+                onChange={(e) => handleDateFilterChange('startDate', e.target.value)}
+                className="border border-slate-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="flex items-center space-x-2">
+              <label className="text-sm text-slate-600">To:</label>
+              <input
+                type="date"
+                value={dateFilter.endDate || ''}
+                onChange={(e) => handleDateFilterChange('endDate', e.target.value)}
+                className="border border-slate-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            {(dateFilter.startDate || dateFilter.endDate) && (
+              <button
+                onClick={clearDateFilter}
+                className="text-sm text-blue-600 hover:text-blue-800"
+              >
+                Clear
+              </button>
+            )}
+          </div>
         </div>
         <div className="max-h-96 overflow-y-auto">
-          {recentActivities.length === 0 ? (
-            <div className="px-6 py-4 text-center text-sm text-slate-500">No recent activity</div>
+          {getRecentActivities.length === 0 ? (
+            <div className="px-6 py-4 text-center text-sm text-slate-500">
+              No recent activity{dateFilter.startDate || dateFilter.endDate ? ' for the selected date range' : ''}
+            </div>
           ) : (
             <table className="w-full text-sm text-left text-slate-800">
               <thead className="text-xs uppercase text-slate-500 bg-slate-50 sticky top-0">
@@ -375,7 +448,7 @@ const BdaDashboard = () => {
                 </tr>
               </thead>
               <tbody>
-                {recentActivities.map((activity, index) => {
+                {getRecentActivities.map((activity, index) => {
                   // Find the corresponding lead to get full details
                   const lead = leads.find((l) => l.name === activity.leadName);
                   if (!lead) return null; // Skip if lead not found

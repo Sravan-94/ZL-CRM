@@ -61,6 +61,7 @@ interface User {
 interface BdaPerformance {
   bdaName: string;
   totalLeads: number;
+  totalCalls: number;
   followupsMade: number;
   quotationsSent: number;
   dealsClosed: number;
@@ -295,10 +296,18 @@ const AdminReports = () => {
             return false;
           }
         });
+
+        // Count unique days with updates as calls
+        const uniqueUpdateDays = new Set(
+          recentBdaLeads
+            .filter(lead => lead.lastUpdated)
+            .map(lead => format(parseISO(lead.lastUpdated), 'yyyy-MM-dd'))
+        );
         
         return {
           bdaName: bda.name,
           totalLeads: recentBdaLeads.length,
+          totalCalls: uniqueUpdateDays.size, // Count of unique days with updates
           followupsMade: recentBdaLeads.filter(lead => lead.followUpDate).length,
           quotationsSent: recentBdaLeads.filter(lead => 
             lead.actionTaken?.toLowerCase().includes('quotation')
@@ -516,10 +525,11 @@ const AdminReports = () => {
                   }}
                 />
                 <Legend verticalAlign="top" height={36} />
-                <Bar dataKey="totalLeads" name="Total Leads" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="followupsMade" name="Follow-ups" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="quotationsSent" name="Quotations" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="dealsClosed" name="Deals Closed" fill="#10b981" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="totalCalls" name="Total Calls" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="totalLeads" name="Total Leads" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="followupsMade" name="Follow-ups" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="quotationsSent" name="Quotations" fill="#10b981" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="dealsClosed" name="Deals Closed" fill="#ef4444" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>

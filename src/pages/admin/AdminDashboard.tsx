@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Users, Calendar, PhoneCall, ClipboardCheck, FileText, CheckCircle } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isValid } from 'date-fns';
 
 interface Lead {
   id: string;
@@ -38,6 +38,11 @@ const AdminDashboard = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // New state for date filter
+  const [dateFilter, setDateFilter] = useState<{
+    startDate: string | null;
+    endDate: string | null;
+  }>({ startDate: null, endDate: null });
 
   // Fetch leads and users from API
   useEffect(() => {
@@ -127,7 +132,28 @@ const AdminDashboard = () => {
         const updateTime = lead.lastUpdated || lead.updatedAt;
         const hasUpdateTime = Boolean(updateTime);
         console.log(`Lead ${lead.name}: lastUpdated = ${lead.lastUpdated}, updatedAt = ${lead.updatedAt}, hasUpdateTime = ${hasUpdateTime}`); // Debug log
-        return hasUpdateTime;
+
+        // Apply date filter
+        if (!hasUpdateTime) return false;
+        if (!dateFilter.startDate && !dateFilter.endDate) return true;
+
+        const updateDate = parseISO(updateTime);
+        if (!isValid(updateDate)) return false;
+
+        const start = dateFilter.startDate ? new Date(dateFilter.startDate) : null;
+        const end = dateFilter.endDate ? new Date(dateFilter.endDate) : null;
+
+        if (start && end) {
+          end.setHours(23, 59, 59, 999); // Include entire end date
+          return updateDate >= start && updateDate <= end;
+        } else if (start) {
+          return updateDate >= start;
+        } else if (end) {
+          end.setHours(23, 59, 59, 999);
+          return updateDate <= end;
+        }
+
+        return true;
       })
       .sort((a, b) => {
         // Use lastUpdated if available, otherwise fall back to updatedAt
@@ -155,7 +181,20 @@ const AdminDashboard = () => {
 
     console.log('Final recent activities:', activities); // Debug log
     return activities;
-  }, [leads]);
+  }, [leads, dateFilter]);
+
+  // Handle date filter changes
+  const handleDateFilterChange = (field: 'startDate' | 'endDate', value: string) => {
+    setDateFilter(prev => ({
+      ...prev,
+      [field]: value || null,
+    }));
+  };
+
+  // Clear date filter
+  const clearDateFilter = () => {
+    setDateFilter({ startDate: null, endDate: null });
+  };
 
   if (isLoading) {
     return (
@@ -282,12 +321,42 @@ const AdminDashboard = () => {
 
       {/* Recent Activity */}
       <div className="bg-white rounded-lg shadow-sm border border-slate-200">
-        <div className="px-6 py-4 border-b border-slate-200">
+        <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center">
           <h2 className="font-medium text-slate-800">Recent Activity</h2>
+          <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2">
+              <label className="text-sm text-slate-600">From:</label>
+              <input
+                type="date"
+                value={dateFilter.startDate || ''}
+                onChange={(e) => handleDateFilterChange('startDate', e.target.value)}
+                className="border border-slate-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="flex items-center space-x-2">
+              <label className="text-sm text-slate-600">To:</label>
+              <input
+                type="date"
+                value={dateFilter.endDate || ''}
+                onChange={(e) => handleDateFilterChange('endDate', e.target.value)}
+                className="border border-slate-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            {(dateFilter.startDate || dateFilter.endDate) && (
+              <button
+                onClick={clearDateFilter}
+                className="text-sm text-blue-600 hover:text-blue-800"
+              >
+                Clear
+              </button>
+            )}
+          </div>
         </div>
         <div className="max-h-96 overflow-y-auto">
           {recentActivities.length === 0 ? (
-            <div className="px-6 py-4 text-center text-sm text-slate-500">No recent activity</div>
+            <div className="px-6 py-4 text-center text-sm text-slate-500">
+              No recent activity{dateFilter.startDate || dateFilter.endDate ? ' for the selected date range' : ''}
+            </div>
           ) : (
             <table className="w-full text-sm text-left text-slate-800">
               <thead className="text-xs uppercase text-slate-500 bg-slate-50 sticky top-0">
