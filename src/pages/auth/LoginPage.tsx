@@ -53,7 +53,7 @@ const LoginPage: React.FC = () => {
         <div className="w-full lg:w-1/2 p-8 lg:p-12 text-center lg:text-left ">
           <div className="flex items-center justify-center lg:justify-start mb-6">
             <img
-              src="public\Logo-removebg-preview.png"
+              src="/Logo-removebg-preview.png"
               alt="CRM Pro Logo"
               className="w-20 h-15 mr-4"
             />
