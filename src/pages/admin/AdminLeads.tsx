@@ -239,11 +239,11 @@ const AdminLeads = () => {
   const filteredLeads = leads
     .filter(lead => {
       // Apply card filter
-      let matchesCardFilter = true;
+      let matchesCardFilter: boolean = true;
       if (activeCardFilter === 'today') {
-        matchesCardFilter = lead.followUpDate && format(new Date(lead.followUpDate), 'yyyy-MM-dd') === today;
+        matchesCardFilter = Boolean(lead.followUpDate && format(new Date(lead.followUpDate), 'yyyy-MM-dd') === today);
       } else if (activeCardFilter === 'overdue') {
-        matchesCardFilter = lead.followUpDate && new Date(lead.followUpDate) < new Date() && format(new Date(lead.followUpDate), 'yyyy-MM-dd') !== today;
+        matchesCardFilter = Boolean(lead.followUpDate && new Date(lead.followUpDate) < new Date() && format(new Date(lead.followUpDate), 'yyyy-MM-dd') !== today);
       } else if (activeCardFilter === 'new') {
         matchesCardFilter = lead.status === 'new';
       } else {
@@ -296,14 +296,24 @@ const AdminLeads = () => {
   };
 
   const handleAssignLeads = async () => {
-    if (!selectedBdaForAssignment || selectedLeads.size === 0) {
-      toast.error('Please select a BDA and at least one lead');
+    if (!selectedBdaForAssignment) {
+      toast.error('Please select a BDA');
       return;
     }
 
-    const selectedBda = bdaUsers.find(bda => bda.id === selectedBdaForAssignment);
+    if (selectedLeads.size === 0) {
+      toast.error('Please select at least one lead to assign');
+      return;
+    }
+
+    // Find the selected BDA, ensuring consistent type comparison
+    const selectedBda = bdaUsers.find(bda => String(bda.id) === String(selectedBdaForAssignment));
+    
     if (!selectedBda) {
-      toast.error('Invalid BDA selected');
+      // This case should ideally be prevented by the disabled state and the check above,
+      // but keeping it for robustness in case of unexpected state issues or data inconsistencies.
+      console.error('Error: Could not find BDA with ID', selectedBdaForAssignment, 'in bdaUsers', bdaUsers);
+      toast.error('Invalid BDA selected. Please try again.');
       return;
     }
 
@@ -314,7 +324,7 @@ const AdminLeads = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           leadIds: Array.from(selectedLeads).map(id => parseInt(id)),
-          bdaId: parseInt(selectedBda.id),
+          bdaId: parseInt(selectedBda.id), // Ensure sending integer ID to backend
           bdaName: selectedBda.name,
         }),
       });
@@ -566,7 +576,7 @@ const AdminLeads = () => {
               <button
                 onClick={handleAssignLeads}
                 disabled={!selectedBdaForAssignment || selectedLeads.size === 0 || isLoading || bdaUsers.length === 0}
-                className="px-3 py-2 text-sm font-medium rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-indigo-300 flex items-center"
+                className="px-3 py-2 text-sm font-medium rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed flex items-center"
               >
                 <Check className="h-4 w-4 mr-1.5" />
                 Assign
@@ -577,7 +587,7 @@ const AdminLeads = () => {
                   setSelectedLeads(new Set());
                   setSelectedBdaForAssignment('');
                 }}
-                className="p-2 text-slate-500 hover:text-slate-700 rounded-md"
+                className="p-2 text-slate-500 hover:text-slate-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={isLoading}
               >
                 <X className="h-5 w-5" />
