@@ -1,18 +1,19 @@
 import { useState, useEffect, useMemo } from 'react';
-import { 
-  BarChart, 
-  Bar, 
-  LineChart, 
-  Line, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  Legend, 
-  ResponsiveContainer 
+import {
+  BarChart,
+  Bar,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
 } from 'recharts';
-import { CalendarClock, CheckCircle, PhoneCall, FileText } from 'lucide-react';
+import { CalendarClock, CheckCircle, PhoneCall, FileText, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format, subDays, parseISO, addDays } from 'date-fns';
+import Select from 'react-select';
 
 type LeadStatus =
   | 'new'
@@ -58,6 +59,15 @@ interface User {
   role: string;
 }
 
+interface LeadHistory {
+  status: LeadStatus;
+  actionStatus: string;
+  remarks: string;
+  actionTaken: string;
+  updatedAt: string;
+  updatedBy: string;
+}
+
 interface BdaPerformance {
   bdaName: string;
   totalLeads: number;
@@ -69,57 +79,88 @@ interface BdaPerformance {
 
 const AdminReports = () => {
   const [dateRange, setDateRange] = useState<'7days' | '30days' | '90days'>('7days');
-  const [selectedBda, setSelectedBda] = useState<string>('all');
+  const [selectedBdas, setSelectedBdas] = useState<string[]>(['all']);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [leadHistory, setLeadHistory] = useState<LeadHistory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dropdownIndex, setDropdownIndex] = useState(0);
 
-  // Fetch leads and users from API
+  // Retry fetch with delay
+  const fetchWithRetry = async (url: string, retries = 3, delay = 2000): Promise<any> => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const response = await fetch(url, { signal: AbortSignal.timeout(10000) }); // 10s timeout
+        if (!response.ok) throw new Error(`Failed to fetch ${url}: ${response.status}`);
+        return await response.json();
+      } catch (err) {
+        if (i === retries - 1) throw err;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  };
+
+  // Fetch leads, users, and lead history
   useEffect(() => {
     const fetchData = async () => {
       try {
         setIsLoading(true);
+        setError(null);
+
         // Fetch leads
-        const leadsResponse = await fetch('https://crmbackend-lxbe.onrender.com/api/leads/getall');
-        if (!leadsResponse.ok) throw new Error(`Failed to fetch leads: ${leadsResponse.status}`);
-        const leadsData = await leadsResponse.json();
-        
-        // Map the leads data with proper field mapping
-        const mappedLeads = leadsData.map((lead: any) => ({
-          id: String(lead.id),
-          name: lead.name || null,
-          phone: lead.contactNo || null,
-          email: lead.email || null,
-          industry: lead.industry || null,
-          companyName: lead.companyName || null,
-          city: lead.city || null,
-          state: lead.state || null,
-          status: (lead.status || 'new') as LeadStatus,
-          assignedTo: lead.assignedTo || null,
-          followUpDate: lead.followUp || null,
-          temperature: lead.temperature || null,
-          interests: lead.intrests || null,
-          remarks: lead.remarks || null,
-          actionStatus: lead.actionStatus || null,
-          actionTaken: lead.actionTaken || null,
-          createdAt: lead.createdAt || new Date().toISOString(),
-          updatedAt: lead.lastUpdated || new Date().toISOString(),
-          lastUpdated: lead.lastUpdated || new Date().toISOString()
-        }));
-        
-        setLeads(mappedLeads);
+        try {
+          const leadsData = await fetchWithRetry('https://crmbackend-lxbe.onrender.com/api/leads/getall');
+          const mappedLeads = leadsData.map((lead: any) => ({
+            id: String(lead.id),
+            name: lead.name || null,
+            phone: lead.contactNo || null,
+            email: lead.email || null,
+            industry: lead.industry || null,
+            companyName: lead.companyName || null,
+            city: lead.city || null,
+            state: lead.state || null,
+            status: (lead.status || 'new') as LeadStatus,
+            assignedTo: lead.assignedTo || null,
+            followUpDate: lead.followUp || null,
+            temperature: lead.temperature || null,
+            interests: lead.intrests || null,
+            remarks: lead.remarks || null,
+            actionStatus: lead.actionStatus || null,
+            actionTaken: lead.actionTaken || null,
+            createdAt: lead.createdAt || new Date().toISOString(),
+            updatedAt: lead.lastUpdated || new Date().toISOString(),
+            lastUpdated: lead.lastUpdated || new Date().toISOString(),
+          }));
+          setLeads(mappedLeads);
+        } catch (err) {
+          console.error('Error fetching leads:', err);
+          setError('Failed to fetch leads. Some data may be incomplete.');
+        }
 
         // Fetch users
-        const usersResponse = await fetch('https://crmbackend-lxbe.onrender.com/api/bda-users');
-        if (!usersResponse.ok) throw new Error(`Failed to fetch users: ${usersResponse.status}`);
-        const usersData = await usersResponse.json();
-        setUsers(usersData);
+        try {
+          const usersData = await fetchWithRetry('https://crmbackend-lxbe.onrender.com/api/bda-users');
+          setUsers(usersData);
+        } catch (err) {
+          console.error('Error fetching users:', err);
+          setError((prev) => (prev ? `${prev} Failed to fetch users.` : 'Failed to fetch users.'));
+        }
 
-        setError(null);
+        // Fetch lead history
+        try {
+          const historyData = await fetchWithRetry('https://crmbackend-lxbe.onrender.com/api/leads/history');
+          setLeadHistory(historyData);
+        } catch (err) {
+          console.error('Error fetching lead history:', err);
+          setError((prev) =>
+            prev ? `${prev} Failed to fetch lead history.` : 'Failed to fetch lead history. Call data may be unavailable.'
+          );
+          setLeadHistory([]); // Fallback to empty history
+        }
       } catch (err) {
         console.error('Error fetching data:', err);
-        setError(err instanceof Error ? err.message : 'Failed to fetch data');
+        setError('Partial data loaded due to slow or failed API responses.');
       } finally {
         setIsLoading(false);
       }
@@ -128,53 +169,71 @@ const AdminReports = () => {
     fetchData();
   }, []);
 
-  // Filter leads based on selected BDA
+  // Filter leads based on selected BDAs
   const filteredLeads = useMemo(() => {
-    if (selectedBda === 'all') return leads;
-    return leads.filter(lead => 
-      lead.assignedTo?.toLowerCase() === selectedBda.toLowerCase() ||
-      lead.assignedTo?.toString() === selectedBda.toString()
+    if (selectedBdas.includes('all')) return leads;
+    return leads.filter((lead) =>
+      selectedBdas.some(
+        (bda) =>
+          lead.assignedTo?.toLowerCase() === bda.toLowerCase() ||
+          lead.assignedTo?.toString() === bda.toString()
+      )
     );
-  }, [leads, selectedBda]);
+  }, [leads, selectedBdas]);
 
-  // Generate daily activity data for the selected date range
+  // Filter lead history based on date range and selected BDAs
+  const filteredLeadHistory = useMemo(() => {
+    let days = dateRange === '30days' ? 30 : dateRange === '90days' ? 90 : 7;
+    const startDate = subDays(new Date(), days);
+    return leadHistory.filter((history) => {
+      try {
+        const updatedDate = parseISO(history.updatedAt);
+        const isWithinDateRange = updatedDate >= startDate;
+        const isBySelectedBda =
+          selectedBdas.includes('all') ||
+          selectedBdas.some(
+            (bda) =>
+              history.updatedBy.toLowerCase() === bda.toLowerCase() ||
+              users.find((user) => user.id === bda)?.name.toLowerCase() === history.updatedBy.toLowerCase()
+          );
+        return isWithinDateRange && isBySelectedBda;
+      } catch (error) {
+        console.error('Error parsing history date:', error);
+        return false;
+      }
+    });
+  }, [leadHistory, selectedBdas, dateRange, users]);
+
+  // Generate daily activity data
   const dailyActivityData = useMemo(() => {
-    let days = 7;
-    switch (dateRange) {
-      case '30days':
-        days = 30;
-        break;
-      case '90days':
-        days = 90;
-        break;
-      default:
-        days = 7;
-    }
-    
+    let days = dateRange === '30days' ? 30 : dateRange === '90days' ? 90 : 7;
     const data = [];
     const startDate = subDays(new Date(), days - 1);
-    
+
     for (let i = 0; i < days; i++) {
       const date = addDays(startDate, i);
       const dateStr = format(date, 'yyyy-MM-dd');
-      
-      // Count all updates on this date as calls
-      const updatedLeads = filteredLeads.filter(lead => {
+
+      const calls = filteredLeadHistory.filter((history) => {
+        try {
+          const historyDate = format(parseISO(history.updatedAt), 'yyyy-MM-dd');
+          return historyDate === dateStr;
+        } catch (error) {
+          return false;
+        }
+      }).length;
+
+      const updatedLeads = filteredLeads.filter((lead) => {
         if (!lead.lastUpdated) return false;
         try {
           const leadDate = format(parseISO(lead.lastUpdated), 'yyyy-MM-dd');
           return leadDate === dateStr;
         } catch (error) {
-          console.error('Error parsing date:', error);
           return false;
         }
       });
-      
-      // Count all updates as calls
-      const calls = updatedLeads.length;
-      
-      // Count follow-ups, quotations, and closed deals
-      const followups = updatedLeads.filter(lead => {
+
+      const followups = updatedLeads.filter((lead) => {
         if (!lead.followUpDate) return false;
         try {
           const followUpDate = format(parseISO(lead.followUpDate), 'yyyy-MM-dd');
@@ -184,91 +243,71 @@ const AdminReports = () => {
         }
       }).length;
 
-      const quotations = updatedLeads.filter(lead => 
+      const quotations = updatedLeads.filter((lead) =>
         lead.actionTaken?.toLowerCase().includes('quotation')
       ).length;
 
-      const closedWon = updatedLeads.filter(lead => 
-        lead.status?.toLowerCase() === 'closed_won'
-      ).length;
-      
+      const closedWon = updatedLeads.filter((lead) => lead.status?.toLowerCase() === 'closed_won')
+        .length;
+
       data.push({
         date: format(date, 'MMM d'),
         calls,
         followups,
         quotations,
-        closedWon
+        closedWon,
       });
     }
-    
-    return data;
-  }, [filteredLeads, dateRange]);
 
-  // Calculate metrics for the selected BDA and date range
+    return data;
+  }, [filteredLeads, filteredLeadHistory, dateRange]);
+
+  // Calculate metrics
   const metrics = useMemo(() => {
-    let days = 7;
-    switch (dateRange) {
-      case '30days':
-        days = 30;
-        break;
-      case '90days':
-        days = 90;
-        break;
-      default:
-        days = 7;
-    }
-    
+    let days = dateRange === '30days' ? 30 : dateRange === '90days' ? 90 : 7;
     const startDate = subDays(new Date(), days);
-    
-    // Filter leads updated within the date range
-    const recentLeads = filteredLeads.filter(lead => {
+
+    const recentLeads = filteredLeads.filter((lead) => {
       if (!lead.lastUpdated) return false;
       try {
         const updatedDate = parseISO(lead.lastUpdated);
         return updatedDate >= startDate;
       } catch (error) {
-        console.error('Error parsing date:', error);
         return false;
       }
     });
-    
-    // Count all updates as calls
-    const totalCalls = recentLeads.length;
-    
-    // Count follow-ups, quotations, and closed deals
-    const followupsMade = recentLeads.filter(lead => lead.followUpDate).length;
-    const quotationsSent = recentLeads.filter(lead => 
+
+    const totalCalls = filteredLeadHistory.length;
+
+    const followupsMade = recentLeads.filter((lead) => lead.followUpDate).length;
+    const quotationsSent = recentLeads.filter((lead) =>
       lead.actionTaken?.toLowerCase().includes('quotation')
     ).length;
-    const dealsClosed = recentLeads.filter(lead => 
-      lead.status?.toLowerCase() === 'closed_won'
-    ).length;
-    
+    const dealsClosed = recentLeads.filter((lead) => lead.status?.toLowerCase() === 'closed_won').length;
+
     return {
       totalCalls,
       followupsMade,
       quotationsSent,
-      dealsClosed
+      dealsClosed,
     };
-  }, [filteredLeads, dateRange]);
+  }, [filteredLeads, filteredLeadHistory, dateRange]);
 
   // Get conversion rate
   const conversionRate = useMemo(() => {
     if (filteredLeads.length === 0) return 0;
-    
-    const closedWon = filteredLeads.filter(lead => lead.status === 'closed_won').length;
+    const closedWon = filteredLeads.filter((lead) => lead.status === 'closed_won').length;
     return Math.round((closedWon / filteredLeads.length) * 100);
   }, [filteredLeads]);
 
   // Get recent lead updates
   const recentLeadUpdates = useMemo(() => {
     return [...filteredLeads]
-      .filter(lead => lead.lastUpdated) // Only include leads with lastUpdated
+      .filter((lead) => lead.lastUpdated)
       .sort((a, b) => {
         try {
           return new Date(b.lastUpdated!).getTime() - new Date(a.lastUpdated!).getTime();
         } catch (error) {
-          console.error('Error sorting dates:', error);
           return 0;
         }
       })
@@ -277,17 +316,26 @@ const AdminReports = () => {
 
   // Generate BDA performance data
   const bdaPerformance = useMemo(() => {
-    return users
-      .filter(user => user.role?.toLowerCase() === 'bda')
-      .map(bda => {
-        const bdaLeads = leads.filter(lead => 
-          lead.assignedTo?.toLowerCase() === bda.name.toLowerCase() ||
-          lead.assignedTo?.toString() === bda.id.toString()
+    const startDate = subDays(new Date(), dateRange === '30days' ? 30 : dateRange === '90days' ? 90 : 7);
+
+    const performance = users
+      .filter((user) => user.role?.toLowerCase() === 'bda')
+      .filter((user) =>
+        selectedBdas.includes('all') ||
+        selectedBdas.some(
+          (bda) =>
+            bda.toLowerCase() === user.name.toLowerCase() ||
+            bda.toString() === user.id.toString()
+        )
+      )
+      .map((bda) => {
+        const bdaLeads = leads.filter(
+          (lead) =>
+            lead.assignedTo?.toLowerCase() === bda.name.toLowerCase() ||
+            lead.assignedTo?.toString() === bda.id.toString()
         );
-        
-        // Filter leads within the selected date range
-        const startDate = subDays(new Date(), dateRange === '30days' ? 30 : dateRange === '90days' ? 90 : 7);
-        const recentBdaLeads = bdaLeads.filter(lead => {
+
+        const recentBdaLeads = bdaLeads.filter((lead) => {
           if (!lead.lastUpdated) return false;
           try {
             const updatedDate = parseISO(lead.lastUpdated);
@@ -297,27 +345,83 @@ const AdminReports = () => {
           }
         });
 
-        // Count unique days with updates as calls
-        const uniqueUpdateDays = new Set(
-          recentBdaLeads
-            .filter(lead => lead.lastUpdated)
-            .map(lead => format(parseISO(lead.lastUpdated), 'yyyy-MM-dd'))
+        const bdaHistory = leadHistory.filter(
+          (history) =>
+            history.updatedBy.toLowerCase() === bda.name.toLowerCase() &&
+            parseISO(history.updatedAt) >= startDate
         );
-        
+
         return {
           bdaName: bda.name,
           totalLeads: recentBdaLeads.length,
-          totalCalls: uniqueUpdateDays.size, // Count of unique days with updates
-          followupsMade: recentBdaLeads.filter(lead => lead.followUpDate).length,
-          quotationsSent: recentBdaLeads.filter(lead => 
+          totalCalls: bdaHistory.length,
+          followupsMade: recentBdaLeads.filter((lead) => lead.followUpDate).length,
+          quotationsSent: recentBdaLeads.filter((lead) =>
             lead.actionTaken?.toLowerCase().includes('quotation')
           ).length,
-          dealsClosed: recentBdaLeads.filter(lead => 
-            lead.status?.toLowerCase() === 'closed_won'
-          ).length
+          dealsClosed: recentBdaLeads.filter((lead) => lead.status?.toLowerCase() === 'closed_won')
+            .length,
         };
       });
-  }, [leads, users, dateRange]);
+
+    return performance;
+  }, [leads, users, leadHistory, dateRange, selectedBdas]);
+
+  // BDA options for react-select
+  const bdaOptions = [
+    { value: 'all', label: 'All BDAs' },
+    ...users
+      .filter((user) => user.role === 'BDA')
+      .map((bda) => ({ value: bda.id, label: bda.name })),
+  ];
+
+  // Handle arrow navigation
+  const handlePrevBda = () => {
+    if (dropdownIndex > 0) {
+      setDropdownIndex(dropdownIndex - 1);
+      setSelectedBdas([bdaOptions[dropdownIndex - 1].value]);
+    }
+  };
+
+  const handleNextBda = () => {
+    if (dropdownIndex < bdaOptions.length - 1) {
+      setDropdownIndex(dropdownIndex + 1);
+      setSelectedBdas([bdaOptions[dropdownIndex + 1].value]);
+    }
+  };
+
+  // Handle multi-select change
+  const handleBdaChange = (selectedOptions: any) => {
+    const selectedValues = selectedOptions.map((option: any) => option.value);
+    if (selectedValues.includes('all')) {
+      setSelectedBdas(['all']);
+      setDropdownIndex(0);
+    } else if (selectedValues.length <= 4) {
+      setSelectedBdas(selectedValues);
+      setDropdownIndex(bdaOptions.findIndex((option) => option.value === selectedValues[0]) || 0);
+    }
+  };
+
+  // Count calls by BDA from lead history
+  const callCountsByBda = useMemo(() => {
+    let days = dateRange === '30days' ? 30 : dateRange === '90days' ? 90 : 7;
+    const startDate = subDays(new Date(), days);
+    const counts: { [key: string]: number } = {};
+
+    leadHistory.forEach((history) => {
+      try {
+        const updatedDate = parseISO(history.updatedAt);
+        if (updatedDate >= startDate) {
+          const bda = history.updatedBy;
+          counts[bda] = (counts[bda] || 0) + 1;
+        }
+      } catch (error) {
+        console.error('Error parsing history date:', error);
+      }
+    });
+
+    return counts;
+  }, [leadHistory, dateRange]);
 
   if (isLoading) {
     return (
@@ -327,36 +431,45 @@ const AdminReports = () => {
     );
   }
 
-  if (error) {
-    return (
-      <div className="bg-red-100 text-red-800 px-4 py-2 rounded-lg">
-        {error}
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
+      {/* Error Message */}
+      {error && (
+        <div className="bg-yellow-100 text-yellow-800 px-4 py-2 rounded-lg">{error}</div>
+      )}
+
       {/* Filters */}
       <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-4">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-4 sm:space-y-0">
           <h2 className="text-lg font-medium text-slate-800">Performance Reports</h2>
-          
+
           <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4 w-full sm:w-auto">
-            <select
-              value={selectedBda}
-              onChange={(e) => setSelectedBda(e.target.value)}
-              className="block w-full sm:w-48 rounded-md border-slate-300 shadow-sm 
-                       focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50 text-sm"
-            >
-              <option value="all">All BDAs</option>
-              {users
-                .filter(user => user.role === 'BDA')
-                .map((bda) => (
-                  <option key={bda.id} value={bda.id}>{bda.name}</option>
-                ))}
-            </select>
-            
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={handlePrevBda}
+                disabled={dropdownIndex === 0}
+                className="p-2 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              <Select
+                isMulti
+                options={bdaOptions}
+                value={bdaOptions.filter((option) => selectedBdas.includes(option.value))}
+                onChange={handleBdaChange}
+                className="w-full sm:w-48 text-sm"
+                placeholder="Select BDAs (max 4)"
+                isOptionDisabled={() => selectedBdas.length >= 4 && !selectedBdas.includes('all')}
+              />
+              <button
+                onClick={handleNextBda}
+                disabled={dropdownIndex >= bdaOptions.length - 1}
+                className="p-2 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            </div>
+
             <div className="flex rounded-md shadow-sm">
               <button
                 onClick={() => setDateRange('7days')}
@@ -392,7 +505,22 @@ const AdminReports = () => {
           </div>
         </div>
       </div>
-      
+
+      {/* Call Counts by BDA */}
+      {leadHistory.length > 0 && (
+        <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-4">
+          <h3 className="font-medium text-slate-800 mb-4">Call Counts by BDA</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Object.entries(callCountsByBda).map(([bda, count]) => (
+              <div key={bda} className="p-4 bg-gray-50 rounded-md">
+                <p className="text-sm font-medium text-slate-600">{bda}</p>
+                <p className="text-lg font-semibold text-slate-800">{count} Calls</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Metrics cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-6">
@@ -401,24 +529,24 @@ const AdminReports = () => {
               <PhoneCall className="h-6 w-6 text-blue-600" />
             </div>
             <div>
-              <p className="text-sm font-medium text-slate-500">Total Calls</p>
+              <p className="text-sm font-medium text-slate-500">Total Calls Made</p>
               <p className="text-2xl font-semibold text-slate-800">{metrics.totalCalls}</p>
             </div>
           </div>
         </div>
-        
+
         <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-6">
           <div className="flex items-center">
             <div className="p-3 rounded-full bg-purple-100 mr-4">
               <CalendarClock className="h-6 w-6 text-purple-600" />
             </div>
             <div>
-              <p className="text-sm font-medium text-slate-500">Follow-ups Made</p>
+              <p className="text-sm font-medium text-slate-500">Follow-ups Scheduled</p>
               <p className="text-2xl font-semibold text-slate-800">{metrics.followupsMade}</p>
             </div>
           </div>
         </div>
-        
+
         <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-6">
           <div className="flex items-center">
             <div className="p-3 rounded-full bg-amber-100 mr-4">
@@ -430,7 +558,7 @@ const AdminReports = () => {
             </div>
           </div>
         </div>
-        
+
         <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-6">
           <div className="flex items-center">
             <div className="p-3 rounded-full bg-green-100 mr-4">
@@ -443,7 +571,7 @@ const AdminReports = () => {
           </div>
         </div>
       </div>
-      
+
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Daily activity chart */}
@@ -458,45 +586,45 @@ const AdminReports = () => {
                 <XAxis dataKey="date" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip
-                  contentStyle={{ 
+                  contentStyle={{
                     borderRadius: '0.375rem',
                     border: '1px solid #e2e8f0',
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
                   }}
                 />
                 <Legend verticalAlign="top" height={36} />
-                <Line 
-                  type="monotone" 
-                  dataKey="calls" 
-                  stroke="#3b82f6" 
-                  name="Calls" 
+                <Line
+                  type="monotone"
+                  dataKey="calls"
+                  stroke="#3b82f6"
+                  name="Calls Made"
                   strokeWidth={2}
                   dot={{ r: 3 }}
                   activeDot={{ r: 6 }}
                 />
-                <Line 
-                  type="monotone" 
-                  dataKey="followups" 
-                  stroke="#8b5cf6" 
-                  name="Follow-ups" 
+                <Line
+                  type="monotone"
+                  dataKey="followups"
+                  stroke="#8b5cf6"
+                  name="Follow-ups"
                   strokeWidth={2}
                   dot={{ r: 3 }}
                   activeDot={{ r: 6 }}
                 />
-                <Line 
-                  type="monotone" 
-                  dataKey="quotations" 
-                  stroke="#f59e0b" 
-                  name="Quotations" 
+                <Line
+                  type="monotone"
+                  dataKey="quotations"
+                  stroke="#f59e0b"
+                  name="Quotations"
                   strokeWidth={2}
                   dot={{ r: 3 }}
                   activeDot={{ r: 6 }}
                 />
-                <Line 
-                  type="monotone" 
-                  dataKey="closedWon" 
-                  stroke="#10b981" 
-                  name="Deals Closed" 
+                <Line
+                  type="monotone"
+                  dataKey="closedWon"
+                  stroke="#10b981"
+                  name="Deals Closed"
                   strokeWidth={2}
                   dot={{ r: 3 }}
                   activeDot={{ r: 6 }}
@@ -505,7 +633,7 @@ const AdminReports = () => {
             </ResponsiveContainer>
           </div>
         </div>
-        
+
         {/* BDA performance comparison */}
         <div className="bg-white rounded-lg border border-slate-200 shadow-sm">
           <div className="px-6 py-4 border-b border-slate-200">
@@ -518,27 +646,51 @@ const AdminReports = () => {
                 <XAxis dataKey="bdaName" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip
-                  contentStyle={{ 
+                  contentStyle={{
                     borderRadius: '0.375rem',
                     border: '1px solid #e2e8f0',
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
                   }}
                 />
                 <Legend verticalAlign="top" height={36} />
-                <Bar dataKey="totalCalls" name="Total Calls" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="totalLeads" name="Total Leads" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="followupsMade" name="Follow-ups" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="quotationsSent" name="Quotations" fill="#10b981" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="dealsClosed" name="Deals Closed" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                <Bar
+                  dataKey="totalCalls"
+                  name="Calls Made"
+                  fill="#3b82f6"
+                  radius={[4, 4, 0, 0]}
+                />
+                <Bar
+                  dataKey="totalLeads"
+                  name="Leads Assigned"
+                  fill="#8b5cf6"
+                  radius={[4, 4, 0, 0]}
+                />
+                <Bar
+                  dataKey="followupsMade"
+                  name="Follow-ups"
+                  fill="#f59e0b"
+                  radius={[4, 4, 0, 0]}
+                />
+                <Bar
+                  dataKey="quotationsSent"
+                  name="Quotations"
+                  fill="#10b981"
+                  radius={[4, 4, 0, 0]}
+                />
+                <Bar
+                  dataKey="dealsClosed"
+                  name="Deals Closed"
+                  fill="#ef4444"
+                  radius={[4, 4, 0, 0]}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
       </div>
-      
+
       {/* Additional stats */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Conversion rate */}
         <div className="bg-white rounded-lg border border-slate-200 shadow-sm lg:col-span-1">
           <div className="px-6 py-4 border-b border-slate-200">
             <h3 className="font-medium text-slate-800">Conversion Rate</h3>
@@ -572,8 +724,7 @@ const AdminReports = () => {
             </div>
           </div>
         </div>
-        
-        {/* Recent lead updates */}
+
         <div className="bg-white rounded-lg border border-slate-200 shadow-sm lg:col-span-3">
           <div className="px-6 py-4 border-b border-slate-200">
             <h3 className="font-medium text-slate-800">Recent Lead Updates</h3>
@@ -590,14 +741,16 @@ const AdminReports = () => {
                     <div>
                       <div className="text-sm font-medium text-slate-800">{lead.name}</div>
                       <div className="text-sm text-slate-500">
-                        {lead.assignedTo || 'Unassigned'} • {lead.status.charAt(0).toUpperCase() + lead.status.slice(1).replace('_', ' ')}
+                        {lead.assignedTo || 'Unassigned'} •{' '}
+                        {lead.status.charAt(0).toUpperCase() + lead.status.slice(1).replace('_', ' ')}
                       </div>
                     </div>
                     <div className="text-xs text-slate-500">
-                      {lead.updatedAt ? format(parseISO(lead.updatedAt), 'MMM d, h:mm a') : 'No update date'}
+                      {lead.updatedAt
+                        ? format(parseISO(lead.updatedAt), 'MMM d, h:mm a')
+                        : 'No update date'}
                     </div>
                   </div>
-                  
                   <div className="mt-1 flex flex-wrap gap-2">
                     {lead.actionTaken?.includes('whatsapp') && (
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
@@ -617,6 +770,15 @@ const AdminReports = () => {
                     {lead.actionTaken?.includes('sample') && (
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
                         Sample Work Sent
+                      </span>
+                    )}
+                    {leadHistory.some(
+                      (history) =>
+                        history.updatedAt === lead.lastUpdated &&
+                        ['NotAnswered', 'SwitchedOff', 'NotInterested', 'CallBackLater'].includes(history.status)
+                    ) && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                        Call Attempted
                       </span>
                     )}
                   </div>

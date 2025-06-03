@@ -38,7 +38,7 @@ interface Lead {
   assignedBdaId: string | null;
   assignedBdaName: string | null;
   followUpDate: string | null;
-  intrests: string | null;
+  interests: string | null;
   remarks: string | null;
   actionStatus: string | null;
   actionTaken: string | null;
@@ -125,7 +125,7 @@ const AdminLeads = () => {
               assignedBdaId: lead.assignedBdaId !== undefined && lead.assignedBdaId !== null ? String(lead.assignedBdaId) : null,
               assignedBdaName: lead.assignedTo || null,
               followUpDate: lead.followUp || null,
-              intrests: lead.intrests || null,
+              interests: lead.intrests || null,
               remarks: lead.remarks || null,
               actionStatus: lead.actionStatus || null,
               actionTaken: lead.actionTaken || null,
@@ -169,16 +169,50 @@ const AdminLeads = () => {
     }
   };
 
-  // Calculate counts for the filter cards
   const today = format(new Date(), 'yyyy-MM-dd');
-  const allLeadsCount = leads.length;
-  const todaysFollowUpsCount = leads.filter(lead => 
+  const bdaFilteredLeads = leads.filter(lead => {
+    let matchesBda: boolean;
+    if (bdaFilter === 'all') {
+      matchesBda = true;
+    } else if (bdaFilter === 'unassigned') {
+      matchesBda = !lead.assignedBdaName || lead.assignedBdaName.trim() === '';
+    } else {
+      const selectedBda = bdaUsers.find(bda => String(bda.id) === String(bdaFilter));
+      if (!selectedBda) {
+        matchesBda = false;
+      } else {
+        const leadBdaName = (lead.assignedBdaName || '').trim().toLowerCase();
+        const selectedBdaName = (selectedBda.name || '').trim().toLowerCase();
+        matchesBda = leadBdaName === selectedBdaName;
+      }
+    }
+    return matchesBda;
+  });
+
+  const allLeadsCount = bdaFilteredLeads.length;
+  const todaysFollowUpsCount = bdaFilteredLeads.filter(lead => 
     lead.followUpDate && format(new Date(lead.followUpDate), 'yyyy-MM-dd') === today
   ).length;
-  const overdueFollowUpsCount = leads.filter(lead => 
+  const overdueFollowUpsCount = bdaFilteredLeads.filter(lead => 
     lead.followUpDate && new Date(lead.followUpDate) < new Date() && format(new Date(lead.followUpDate), 'yyyy-MM-dd') !== today
   ).length;
-  const newLeadsCount = leads.filter(lead => lead.status === 'new').length;
+  const newLeadsCount = bdaFilteredLeads.filter(lead => lead.status === 'new').length;
+
+  console.log('Filter Card Counts Debug:', {
+    bdaFilter,
+    totalBdaFilteredLeads: bdaFilteredLeads.length,
+    allLeadsCount,
+    todaysFollowUpsCount,
+    overdueFollowUpsCount,
+    newLeadsCount,
+    sampleBdaFilteredLeads: bdaFilteredLeads.slice(0, 3).map(lead => ({
+      id: lead.id,
+      name: lead.name,
+      assignedBdaName: lead.assignedBdaName,
+      status: lead.status,
+      followUpDate: lead.followUpDate,
+    })),
+  });
 
   const toggleLeadSelection = (leadId: string) => {
     setSelectedLeads(prev => {
@@ -218,7 +252,6 @@ const AdminLeads = () => {
     })));
   }, [sortBy, sortDirection, leads]);
 
-  // Define the order of statuses
   const statusOrder: Record<LeadStatus, number> = {
     'new': 1,
     'contacted': 2,
@@ -238,7 +271,6 @@ const AdminLeads = () => {
 
   const filteredLeads = leads
     .filter(lead => {
-      // Apply card filter
       let matchesCardFilter: boolean = true;
       if (activeCardFilter === 'today') {
         matchesCardFilter = Boolean(lead.followUpDate && format(new Date(lead.followUpDate), 'yyyy-MM-dd') === today);
@@ -247,7 +279,7 @@ const AdminLeads = () => {
       } else if (activeCardFilter === 'new') {
         matchesCardFilter = lead.status === 'new';
       } else {
-        matchesCardFilter = true; // 'all' filter shows all leads
+        matchesCardFilter = true;
       }
 
       const matchesSearch =
@@ -255,13 +287,39 @@ const AdminLeads = () => {
         (lead.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (lead.phone || '').includes(searchTerm);
       const matchesStatus = statusFilter === 'all' || lead.status === statusFilter;
-      const matchesBda =
-        bdaFilter === 'all' ||
-        (bdaFilter === 'unassigned' ? !lead.assignedBdaId : lead.assignedBdaId === bdaFilter);
+
+      let matchesBda: boolean;
+      if (bdaFilter === 'all') {
+        matchesBda = true;
+      } else if (bdaFilter === 'unassigned') {
+        matchesBda = !lead.assignedBdaName || lead.assignedBdaName.trim() === '';
+      } else {
+        const selectedBda = bdaUsers.find(bda => String(bda.id) === String(bdaFilter));
+        if (!selectedBda) {
+          matchesBda = false;
+        } else {
+          const leadBdaName = (lead.assignedBdaName || '').trim().toLowerCase();
+          const selectedBdaName = (selectedBda.name || '').trim().toLowerCase();
+          matchesBda = leadBdaName === selectedBdaName;
+        }
+      }
+
+      console.log('BDA Filter Debug:', {
+        leadId: lead.id,
+        leadName: lead.name,
+        assignedBdaName: lead.assignedBdaName,
+        normalizedAssignedBdaName: (lead.assignedBdaName || '').trim().toLowerCase(),
+        assignedBdaId: lead.assignedBdaId,
+        bdaFilter,
+        matchesBda,
+        selectedBdaId: bdaFilter,
+        selectedBdaName: bdaUsers.find(bda => String(bda.id) === String(bdaFilter))?.name || 'N/A',
+        normalizedSelectedBdaName: (bdaUsers.find(bda => String(bda.id) === String(bdaFilter))?.name || '').trim().toLowerCase(),
+      });
+
       return matchesCardFilter && matchesSearch && matchesStatus && matchesBda;
     })
     .sort((a, b) => {
-      // First sort by status using the predefined order
       const statusA = statusOrder[a.status] || 999;
       const statusB = statusOrder[b.status] || 999;
       
@@ -269,16 +327,14 @@ const AdminLeads = () => {
         return statusA - statusB;
       }
 
-      // If status is the same, sort by lastUpdated within the status group
       const dateA = new Date(a.lastUpdated || a.updatedAt || '').getTime();
       const dateB = new Date(b.lastUpdated || b.updatedAt || '').getTime();
       console.log(`Comparing dates for ${a.name} (${a.status}): ${dateA} vs ${b.name} (${b.status}): ${dateB}`);
-      return dateA - dateB; // Ascending order for dates within status group
+      return dateA - dateB;
     });
 
   const totalPages = Math.ceil(filteredLeads.length / leadsPerPage);
 
-  // Pagination helpers
   const startIndex = (currentPage - 1) * leadsPerPage;
   const endIndex = startIndex + leadsPerPage;
   const paginatedLeads = filteredLeads.slice(startIndex, endIndex);
@@ -306,12 +362,9 @@ const AdminLeads = () => {
       return;
     }
 
-    // Find the selected BDA, ensuring consistent type comparison
     const selectedBda = bdaUsers.find(bda => String(bda.id) === String(selectedBdaForAssignment));
     
     if (!selectedBda) {
-      // This case should ideally be prevented by the disabled state and the check above,
-      // but keeping it for robustness in case of unexpected state issues or data inconsistencies.
       console.error('Error: Could not find BDA with ID', selectedBdaForAssignment, 'in bdaUsers', bdaUsers);
       toast.error('Invalid BDA selected. Please try again.');
       return;
@@ -324,7 +377,7 @@ const AdminLeads = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           leadIds: Array.from(selectedLeads).map(id => parseInt(id)),
-          bdaId: parseInt(selectedBda.id), // Ensure sending integer ID to backend
+          bdaId: parseInt(selectedBda.id),
           bdaName: selectedBda.name,
         }),
       });
@@ -365,7 +418,7 @@ const AdminLeads = () => {
     setIsLoading(true);
     try {
       const response = await fetch('https://crmbackend-lxbe.onrender.com/api/leads/bulk-delete', {
-        method: 'POST',
+        method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           leadIds: Array.from(selectedLeads).map(id => parseInt(id)),
@@ -374,10 +427,8 @@ const AdminLeads = () => {
 
       if (!response.ok) throw new Error('Failed to delete leads');
 
-      // Remove deleted leads from state
       setLeads(prev => prev.filter(lead => !selectedLeads.has(lead.id)));
 
-      // Adjust current page if necessary
       const remainingLeads = filteredLeads.filter(lead => !selectedLeads.has(lead.id));
       const newTotalPages = Math.ceil(remainingLeads.length / leadsPerPage);
       if (currentPage > newTotalPages && newTotalPages > 0) {
@@ -432,7 +483,7 @@ const AdminLeads = () => {
             assignedBdaId: lead.assignedBdaId !== undefined && lead.assignedBdaId !== null ? String(lead.assignedBdaId) : null,
             assignedBdaName: lead.assignedTo || null,
             followUpDate: lead.followUp || null,
-            intrests: lead.intrests || null,
+            interests: lead.intrests || null,
             remarks: lead.remarks || null,
             actionStatus: lead.actionStatus || null,
             actionTaken: lead.actionTaken || null,
@@ -460,7 +511,7 @@ const AdminLeads = () => {
       Status: lead.status,
       ActionStatus: lead.actionStatus || '',
       AssignedTo: lead.assignedBdaName || 'Unassigned',
-      Intrests: lead.intrests || '',
+      Interests: lead.interests || '',
       Remarks: lead.remarks || '',
       ActionTaken: lead.actionTaken || '',
       CompanyName: lead.companyName || '',
@@ -628,7 +679,6 @@ const AdminLeads = () => {
         </div>
       )}
 
-      {/* Filter Cards Section with Clickable Filters and Updated Icons */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div
           onClick={() => setActiveCardFilter('all')}
@@ -979,7 +1029,6 @@ const AdminLeads = () => {
             </table>
           </div>
 
-          {/* Pagination controls */}
           {totalPages > 1 && (
             <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between">
               <div className="flex-1 flex justify-between sm:hidden">
@@ -1063,22 +1112,22 @@ const AdminLeads = () => {
             setIsSaving(true);
             try {
               const payload = {
-                name: updatedLead.name ?? "",
-                contactNo: updatedLead.phone ?? "",
-                email: updatedLead.email ?? "",
-                status: updatedLead.status ?? "",
-                actionStatus: updatedLead.actionStatus ?? "",
-                assignedTo: updatedLead.assignedBdaName ?? "",
-                intrests: updatedLead.intrests ?? "",
-                remarks: updatedLead.remarks ?? "",
-                actionTaken: updatedLead.actionTaken ?? "",
-                followUp: updatedLead.followUpDate ?? "",
+                name: updatedLead.name ?? '',
+                contactNo: updatedLead.phone ?? '',
+                email: updatedLead.email ?? '',
+                status: updatedLead.status ?? '',
+                actionStatus: updatedLead.actionStatus ?? '',
+                assignedTo: updatedLead.assignedBdaName ?? '',
+                interests: updatedLead.interests ?? '',
+                remarks: updatedLead.remarks ?? '',
+                actionTaken: updatedLead.actionTaken ?? '',
+                followUp: updatedLead.followUpDate ?? '',
                 loggedinId: Number(user.id),
-                companyName: updatedLead.companyName ?? "",
-                industry: updatedLead.industry ?? "",
-                city: updatedLead.city ?? "",
-                state: updatedLead.state ?? "",
-                lastUpdated: new Date().toISOString()
+                companyName: updatedLead.companyName ?? '',
+                industry: updatedLead.industry ?? '',
+                city: updatedLead.city ?? '',
+                state: updatedLead.state ?? '',
+                lastUpdated: new Date().toISOString(),
               };
               const response = await fetch(`https://crmbackend-lxbe.onrender.com/api/leads/update/${updatedLead.id}`, {
                 method: 'PUT',
@@ -1109,7 +1158,7 @@ const AdminLeads = () => {
                     assignedBdaId: lead.assignedBdaId !== undefined && lead.assignedBdaId !== null ? String(lead.assignedBdaId) : null,
                     assignedBdaName: lead.assignedTo || null,
                     followUpDate: lead.followUp || null,
-                    intrests: lead.intrests || null,
+                    interests: lead.intrests || null,
                     remarks: lead.remarks || null,
                     actionStatus: lead.actionStatus || null,
                     actionTaken: lead.actionTaken || null,
