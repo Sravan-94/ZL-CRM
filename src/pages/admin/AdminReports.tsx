@@ -78,20 +78,19 @@ interface BdaPerformance {
 }
 
 const AdminReports = () => {
-  const [dateRange, setDateRange] = useState<'7days' | '30days' | '90days'>('7days');
-  const [selectedBdas, setSelectedBdas] = useState<string[]>(['all']);
+  const [dateRange, setDateRange] = useState<'today' | '7days' | '30days' | '90days'>('7days');
+  const [selectedBdas, setSelectedBdas] = useState<string[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [leadHistory, setLeadHistory] = useState<LeadHistory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [dropdownIndex, setDropdownIndex] = useState(0);
 
   // Retry fetch with delay
   const fetchWithRetry = async (url: string, retries = 3, delay = 2000): Promise<any> => {
     for (let i = 0; i < retries; i++) {
       try {
-        const response = await fetch(url, { signal: AbortSignal.timeout(10000) }); // 10s timeout
+        const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
         if (!response.ok) throw new Error(`Failed to fetch ${url}: ${response.status}`);
         return await response.json();
       } catch (err) {
@@ -156,7 +155,7 @@ const AdminReports = () => {
           setError((prev) =>
             prev ? `${prev} Failed to fetch lead history.` : 'Failed to fetch lead history. Call data may be unavailable.'
           );
-          setLeadHistory([]); // Fallback to empty history
+          setLeadHistory([]);
         }
       } catch (err) {
         console.error('Error fetching data:', err);
@@ -169,33 +168,87 @@ const AdminReports = () => {
     fetchData();
   }, []);
 
+  // BDA options for react-select
+  const bdaOptions = useMemo(() => {
+    const bdaUsers = users.filter(user => user.role?.toLowerCase() === 'bda');
+    return [
+      { value: 'all', label: 'All BDAs' },
+      ...bdaUsers.map(bda => ({
+        value: bda.id,
+        label: bda.name,
+      }))
+    ];
+  }, [users]);
+
+  // Handle BDA selection change
+  const handleBdaChange = (selectedOptions: any) => {
+    if (!selectedOptions || selectedOptions.length === 0) {
+      setSelectedBdas([]);
+      return;
+    }
+
+    const selectedValues = selectedOptions.map((option: any) => option.value);
+
+    // If "All BDAs" is selected, set to ['all'] only if no other BDAs are selected
+    if (selectedValues.includes('all') && selectedValues.length === 1) {
+      setSelectedBdas(['all']);
+      return;
+    }
+
+    // Filter out 'all' if other BDAs are selected
+    const filteredValues = selectedValues.filter((value: string) => value !== 'all');
+
+    // Enforce max 4 BDAs
+    if (filteredValues.length > 4) {
+      return;
+    }
+
+    setSelectedBdas(filteredValues);
+  };
+
   // Filter leads based on selected BDAs
   const filteredLeads = useMemo(() => {
-    if (selectedBdas.includes('all')) return leads;
-    return leads.filter((lead) =>
-      selectedBdas.some(
-        (bda) =>
-          lead.assignedTo?.toLowerCase() === bda.toLowerCase() ||
-          lead.assignedTo?.toString() === bda.toString()
-      )
-    );
-  }, [leads, selectedBdas]);
+    if (selectedBdas.includes('all') || selectedBdas.length === 0) return leads;
+    
+    return leads.filter((lead) => {
+      if (!lead.assignedTo) return false;
+      
+      return selectedBdas.some((bdaId) => {
+        const selectedBda = users.find(user => user.id === bdaId);
+        if (!selectedBda) return false;
+        
+        const assignedTo = lead.assignedTo?.toLowerCase() || '';
+        const assignedToId = lead.assignedTo?.toString() || '';
+        return (
+          assignedTo === selectedBda.name.toLowerCase() ||
+          assignedToId === selectedBda.id.toString()
+        );
+      });
+    });
+  }, [leads, selectedBdas, users]);
 
   // Filter lead history based on date range and selected BDAs
   const filteredLeadHistory = useMemo(() => {
-    let days = dateRange === '30days' ? 30 : dateRange === '90days' ? 90 : 7;
-    const startDate = subDays(new Date(), days);
+    let startDate: Date;
+    if (dateRange === 'today') {
+      startDate = new Date();
+      startDate.setHours(0, 0, 0, 0);
+    } else {
+      const days = dateRange === '30days' ? 30 : dateRange === '90days' ? 90 : 7;
+      startDate = subDays(new Date(), days);
+    }
+
     return leadHistory.filter((history) => {
       try {
         const updatedDate = parseISO(history.updatedAt);
         const isWithinDateRange = updatedDate >= startDate;
         const isBySelectedBda =
-          selectedBdas.includes('all') ||
-          selectedBdas.some(
-            (bda) =>
-              history.updatedBy.toLowerCase() === bda.toLowerCase() ||
-              users.find((user) => user.id === bda)?.name.toLowerCase() === history.updatedBy.toLowerCase()
-          );
+          selectedBdas.includes('all') || selectedBdas.length === 0 ||
+          selectedBdas.some((bda) => {
+            const selectedBda = users.find(user => user.id === bda);
+            if (!selectedBda) return false;
+            return history.updatedBy.toLowerCase() === selectedBda.name.toLowerCase();
+          });
         return isWithinDateRange && isBySelectedBda;
       } catch (error) {
         console.error('Error parsing history date:', error);
@@ -206,9 +259,19 @@ const AdminReports = () => {
 
   // Generate daily activity data
   const dailyActivityData = useMemo(() => {
-    let days = dateRange === '30days' ? 30 : dateRange === '90days' ? 90 : 7;
+    let days: number;
+    let startDate: Date;
+    
+    if (dateRange === 'today') {
+      days = 1;
+      startDate = new Date();
+      startDate.setHours(0, 0, 0, 0);
+    } else {
+      days = dateRange === '30days' ? 30 : dateRange === '90days' ? 90 : 7;
+      startDate = subDays(new Date(), days - 1);
+    }
+
     const data = [];
-    const startDate = subDays(new Date(), days - 1);
 
     for (let i = 0; i < days; i++) {
       const date = addDays(startDate, i);
@@ -316,17 +379,20 @@ const AdminReports = () => {
 
   // Generate BDA performance data
   const bdaPerformance = useMemo(() => {
-    const startDate = subDays(new Date(), dateRange === '30days' ? 30 : dateRange === '90days' ? 90 : 7);
+    let startDate: Date;
+    if (dateRange === 'today') {
+      startDate = new Date();
+      startDate.setHours(0, 0, 0, 0);
+    } else {
+      const days = dateRange === '30days' ? 30 : dateRange === '90days' ? 90 : 7;
+      startDate = subDays(new Date(), days);
+    }
 
     const performance = users
       .filter((user) => user.role?.toLowerCase() === 'bda')
       .filter((user) =>
-        selectedBdas.includes('all') ||
-        selectedBdas.some(
-          (bda) =>
-            bda.toLowerCase() === user.name.toLowerCase() ||
-            bda.toString() === user.id.toString()
-        )
+        selectedBdas.includes('all') || selectedBdas.length === 0 ||
+        selectedBdas.includes(user.id)
       )
       .map((bda) => {
         const bdaLeads = leads.filter(
@@ -346,9 +412,16 @@ const AdminReports = () => {
         });
 
         const bdaHistory = leadHistory.filter(
-          (history) =>
-            history.updatedBy.toLowerCase() === bda.name.toLowerCase() &&
-            parseISO(history.updatedAt) >= startDate
+          (history) => {
+            try {
+              return (
+                history.updatedBy.toLowerCase() === bda.name.toLowerCase() &&
+                parseISO(history.updatedAt) >= startDate
+              );
+            } catch (error) {
+              return false;
+            }
+          }
         );
 
         return {
@@ -366,62 +439,6 @@ const AdminReports = () => {
 
     return performance;
   }, [leads, users, leadHistory, dateRange, selectedBdas]);
-
-  // BDA options for react-select
-  const bdaOptions = [
-    { value: 'all', label: 'All BDAs' },
-    ...users
-      .filter((user) => user.role === 'BDA')
-      .map((bda) => ({ value: bda.id, label: bda.name })),
-  ];
-
-  // Handle arrow navigation
-  const handlePrevBda = () => {
-    if (dropdownIndex > 0) {
-      setDropdownIndex(dropdownIndex - 1);
-      setSelectedBdas([bdaOptions[dropdownIndex - 1].value]);
-    }
-  };
-
-  const handleNextBda = () => {
-    if (dropdownIndex < bdaOptions.length - 1) {
-      setDropdownIndex(dropdownIndex + 1);
-      setSelectedBdas([bdaOptions[dropdownIndex + 1].value]);
-    }
-  };
-
-  // Handle multi-select change
-  const handleBdaChange = (selectedOptions: any) => {
-    const selectedValues = selectedOptions.map((option: any) => option.value);
-    if (selectedValues.includes('all')) {
-      setSelectedBdas(['all']);
-      setDropdownIndex(0);
-    } else if (selectedValues.length <= 4) {
-      setSelectedBdas(selectedValues);
-      setDropdownIndex(bdaOptions.findIndex((option) => option.value === selectedValues[0]) || 0);
-    }
-  };
-
-  // Count calls by BDA from lead history
-  const callCountsByBda = useMemo(() => {
-    let days = dateRange === '30days' ? 30 : dateRange === '90days' ? 90 : 7;
-    const startDate = subDays(new Date(), days);
-    const counts: { [key: string]: number } = {};
-
-    leadHistory.forEach((history) => {
-      try {
-        const updatedDate = parseISO(history.updatedAt);
-        if (updatedDate >= startDate) {
-          const bda = history.updatedBy;
-          counts[bda] = (counts[bda] || 0) + 1;
-        }
-      } catch (error) {
-        console.error('Error parsing history date:', error);
-      }
-    });
-
-    return counts;
-  }, [leadHistory, dateRange]);
 
   if (isLoading) {
     return (
@@ -445,35 +462,77 @@ const AdminReports = () => {
 
           <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4 w-full sm:w-auto">
             <div className="flex items-center space-x-2">
-              <button
-                onClick={handlePrevBda}
-                disabled={dropdownIndex === 0}
-                className="p-2 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </button>
               <Select
                 isMulti
                 options={bdaOptions}
-                value={bdaOptions.filter((option) => selectedBdas.includes(option.value))}
+                value={bdaOptions.filter(option => selectedBdas.includes(option.value))}
                 onChange={handleBdaChange}
                 className="w-full sm:w-48 text-sm"
                 placeholder="Select BDAs (max 4)"
-                isOptionDisabled={() => selectedBdas.length >= 4 && !selectedBdas.includes('all')}
+                isOptionDisabled={(option) => 
+                  selectedBdas.length >= 4 && 
+                  !selectedBdas.includes(option.value) && 
+                  option.value !== 'all'
+                }
+                isClearable={true}
+                closeMenuOnSelect={false}
+                blurInputOnSelect={false}
+                menuPlacement="auto"
+                noOptionsMessage={() => "No BDAs available"}
+                styles={{
+                  control: (base) => ({
+                    ...base,
+                    minHeight: '36px',
+                    backgroundColor: 'white',
+                    borderColor: '#e2e8f0',
+                    '&:hover': {
+                      borderColor: '#94a3b8'
+                    }
+                  }),
+                  option: (base, state) => ({
+                    ...base,
+                    backgroundColor: state.isSelected ? '#3b82f6' : state.isFocused ? '#e2e8f0' : 'white',
+                    color: state.isSelected ? 'white' : '#1e293b',
+                    cursor: 'pointer',
+                    ':active': {
+                      backgroundColor: state.isSelected ? '#3b82f6' : '#e2e8f0',
+                    },
+                  }),
+                  multiValue: (base) => ({
+                    ...base,
+                    backgroundColor: '#e2e8f0',
+                  }),
+                  multiValueLabel: (base) => ({
+                    ...base,
+                    color: '#1e293b',
+                    fontWeight: 500,
+                  }),
+                  multiValueRemove: (base) => ({
+                    ...base,
+                    color: '#64748b',
+                    ':hover': {
+                      backgroundColor: '#cbd5e1',
+                      color: '#1e293b',
+                    },
+                  }),
+                }}
               />
-              <button
-                onClick={handleNextBda}
-                disabled={dropdownIndex >= bdaOptions.length - 1}
-                className="p-2 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
-              >
-                <ChevronRight className="h-5 w-5" />
-              </button>
             </div>
 
             <div className="flex rounded-md shadow-sm">
               <button
-                onClick={() => setDateRange('7days')}
+                onClick={() => setDateRange('today')}
                 className={`px-3 py-2 text-sm font-medium rounded-l-md border border-r-0 ${
+                  dateRange === 'today'
+                    ? 'bg-blue-50 text-blue-700 border-blue-300'
+                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                Today
+              </button>
+              <button
+                onClick={() => setDateRange('7days')}
+                className={`px-3 py-2 text-sm font-medium border border-r-0 ${
                   dateRange === '7days'
                     ? 'bg-blue-50 text-blue-700 border-blue-300'
                     : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
@@ -505,21 +564,6 @@ const AdminReports = () => {
           </div>
         </div>
       </div>
-
-      {/* Call Counts by BDA */}
-      {leadHistory.length > 0 && (
-        <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-4">
-          <h3 className="font-medium text-slate-800 mb-4">Call Counts by BDA</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Object.entries(callCountsByBda).map(([bda, count]) => (
-              <div key={bda} className="p-4 bg-gray-50 rounded-md">
-                <p className="text-sm font-medium text-slate-600">{bda}</p>
-                <p className="text-lg font-semibold text-slate-800">{count} Calls</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Metrics cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
