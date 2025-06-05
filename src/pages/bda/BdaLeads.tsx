@@ -68,7 +68,7 @@ const BdaLeads = () => {
       setIsLoading(true);
       try {
         // Fetch leads
-        const leadsResponse = await fetch('https://crmbackend-lxbe.onrender.com/api/leads/getall');
+        const leadsResponse = await fetch('http://147.93.102.131:8080/api/leads/getall');
         if (!leadsResponse.ok) throw new Error(`Failed to fetch leads: ${leadsResponse.status}`);
         const rawLeadsData = await leadsResponse.json();
 
@@ -561,7 +561,7 @@ const BdaLeads = () => {
                 lastUpdated: new Date().toISOString()
               };
 
-              const response = await fetch(`https://crmbackend-lxbe.onrender.com/api/leads/update/${updatedLead.id}`, {
+              const response = await fetch(`http:///api/leads/update/${updatedLead.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
@@ -574,7 +574,7 @@ const BdaLeads = () => {
                 return false;
               }
 
-              const leadsResponse = await fetch('https://crmbackend-lxbe.onrender.com/api/leads/getall');
+              const leadsResponse = await fetch('http://147.93.102.131:8080/api/leads/getall');
               if (!leadsResponse.ok) {
                 console.error('Failed to fetch leads:', leadsResponse.status);
                 toast.error('Failed to refresh leads');

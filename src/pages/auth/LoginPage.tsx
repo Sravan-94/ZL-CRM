@@ -28,7 +28,7 @@ const LoginPage: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const res = await axios.post<{ data: User }>('https://crmbackend-lxbe.onrender.com/api/login', {
+      const res = await axios.post<{ data: User }>('http://147.93.102.131:8080/api/login', {
         email,
         password,
       });

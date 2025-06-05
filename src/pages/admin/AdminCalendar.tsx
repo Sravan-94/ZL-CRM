@@ -19,7 +19,7 @@ const AdminCalendar = () => {
   useEffect(() => {
     const fetchLeads = async () => {
       try {
-        const response = await fetch('https://crmbackend-lxbe.onrender.com/api/leads/getall');
+        const response = await fetch('http://147.93.102.131:8080/api/leads/getall');
         if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
         const data = await response.json();
         
@@ -351,7 +351,7 @@ const AdminCalendar = () => {
           lead={selectedLead}
           onSave={async (updatedLead) => {
             try {
-              const response = await fetch(`https://crmbackend-lxbe.onrender.com/api/leads/update/${updatedLead.id}`, {
+              const response = await fetch(`http://147.93.102.131:8080/api/leads/update/${updatedLead.id}`, {
                 method: 'PUT',
                 headers: {
                   'Content-Type': 'application/json',
@@ -375,7 +375,7 @@ const AdminCalendar = () => {
               }
 
               // Refresh leads after update
-              const leadsResponse = await fetch('https://crmbackend-lxbe.onrender.com/api/leads/getall');
+              const leadsResponse = await fetch('http://147.93.102.131:8080/api/leads/getall');
               if (!leadsResponse.ok) throw new Error('Failed to fetch updated leads');
               const data = await leadsResponse.json();
               

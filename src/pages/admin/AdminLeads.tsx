@@ -107,7 +107,7 @@ const AdminLeads = () => {
     const fetchData = async () => {
       setIsLoading(true);
       try {
-        const leadsResponse = await fetch('https://crmbackend-lxbe.onrender.com/api/leads/getall');
+        const leadsResponse = await fetch('http://147.93.102.131:8080/api/leads/getall');
         if (!leadsResponse.ok) throw new Error(`Failed to fetch leads: ${leadsResponse.status}`);
         const rawLeadsData = await leadsResponse.json();
 
@@ -139,7 +139,7 @@ const AdminLeads = () => {
           setIsLeadsLoaded(true);
         }
 
-        const usersResponse = await fetch('https://crmbackend-lxbe.onrender.com/api/bda-users');
+        const usersResponse = await fetch('http://147.93.102.131:8080/api/bda-users');
         if (!usersResponse.ok) throw new Error(`Failed to fetch BDAs: ${usersResponse.status}`);
         const usersData = await usersResponse.json();
         if (isMounted) setBdaUsers(usersData);
@@ -372,7 +372,7 @@ const AdminLeads = () => {
 
     setIsLoading(true);
     try {
-      const response = await fetch('https://crmbackend-lxbe.onrender.com/api/leads/assign', {
+      const response = await fetch('http://147.93.102.131:8080/api/leads/assign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -417,7 +417,7 @@ const AdminLeads = () => {
 
     setIsLoading(true);
     try {
-      const response = await fetch('https://crmbackend-lxbe.onrender.com/api/leads/bulk-delete', {
+      const response = await fetch('http://147.93.102.131:8080/api/leads/bulk-delete', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -455,7 +455,7 @@ const AdminLeads = () => {
 
     setIsLoading(true);
     try {
-      const response = await fetch('https://crmbackend-lxbe.onrender.com/api/leads/upload', {
+      const response = await fetch('http://147.93.102.131:8080/api/leads/upload', {
         method: 'POST',
         body: formData,
       });
@@ -465,7 +465,7 @@ const AdminLeads = () => {
       const message = await response.text();
       toast.success(message);
 
-      const leadsResponse = await fetch('https://crmbackend-lxbe.onrender.com/api/leads/getall');
+      const leadsResponse = await fetch('http://147.93.102.131:8080/api/leads/getall');
       if (!leadsResponse.ok) throw new Error('Failed to fetch updated leads');
       const rawLeadsData = await leadsResponse.json();
 
@@ -1129,7 +1129,7 @@ const AdminLeads = () => {
                 state: updatedLead.state ?? '',
                 lastUpdated: new Date().toISOString(),
               };
-              const response = await fetch(`https://crmbackend-lxbe.onrender.com/api/leads/update/${updatedLead.id}`, {
+              const response = await fetch(`http://crmbackend-lxbe.on.com/api/leads/update/${updatedLead.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
@@ -1140,7 +1140,7 @@ const AdminLeads = () => {
                 return false;
               }
 
-              const leadsResponse = await fetch('https://crmbackend-lxbe.onrender.com/api/leads/getall');
+              const leadsResponse = await fetch('http://147.93.102.131:8080/api/leads/getall');
               if (!leadsResponse.ok) throw new Error('Failed to fetch updated leads');
               const rawLeads = await leadsResponse.json();
 

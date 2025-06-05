@@ -43,7 +43,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   useEffect(() => {
     const fetchNotifications = async () => {
       try {
-        const response = await fetch('https://crmbackend-lxbe.onrender.com/api/leads/getall');
+        const response = await fetch('http://147.93.102.131:8080/api/leads/getall');
         if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
         const data = await response.json();
         

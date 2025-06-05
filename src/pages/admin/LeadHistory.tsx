@@ -41,7 +41,7 @@ const LeadHistory = () => {
   useEffect(() => {
     const fetchLeadHistory = async () => {
       try {
-        const response = await fetch(`https://crmbackend-lxbe.onrender.com/api/leads/${leadId}/history`);
+        const response = await fetch(`http://147.93.102.131:8080/api/leads/${leadId}/history`);
         if (!response.ok) throw new Error('Failed to fetch lead history');
         const data = await response.json();
         console.log('Lead history API response:', JSON.stringify(data, null, 2));

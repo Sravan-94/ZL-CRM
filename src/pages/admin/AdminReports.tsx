@@ -109,7 +109,7 @@ const AdminReports = () => {
 
         // Fetch leads
         try {
-          const leadsData = await fetchWithRetry('https://crmbackend-lxbe.onrender.com/api/leads/getall');
+          const leadsData = await fetchWithRetry('http://147.93.102.131:8080/api/leads/getall');
           const mappedLeads = leadsData.map((lead: any) => ({
             id: String(lead.id),
             name: lead.name || null,
@@ -139,7 +139,7 @@ const AdminReports = () => {
 
         // Fetch users
         try {
-          const usersData = await fetchWithRetry('https://crmbackend-lxbe.onrender.com/api/bda-users');
+          const usersData = await fetchWithRetry('http://147.93.102.131:8080/api/bda-users');
           setUsers(usersData);
         } catch (err) {
           console.error('Error fetching users:', err);
@@ -148,7 +148,7 @@ const AdminReports = () => {
 
         // Fetch lead history
         try {
-          const historyData = await fetchWithRetry('https://crmbackend-lxbe.onrender.com/api/leads/history');
+          const historyData = await fetchWithRetry('http://147.93.102.131:8080/api/leads/history');
           setLeadHistory(historyData);
         } catch (err) {
           console.error('Error fetching lead history:', err);
