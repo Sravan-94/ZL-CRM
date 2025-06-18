@@ -49,13 +49,13 @@ const AdminDashboard = () => {
     const fetchData = async () => {
       try {
         // Fetch leads
-        const leadsResponse = await fetch('http://147.93.102.131:8080/api/leads/getall');
+        const leadsResponse = await fetch('https://crm.infororg.com/api/leads/getall');
         if (!leadsResponse.ok) throw new Error(`Failed to fetch leads: ${leadsResponse.status}`);
         const leadsData = await leadsResponse.json();
         setLeads(leadsData);
 
         // Fetch users
-        const usersResponse = await fetch('http://147.93.102.131:8080/api/bda-users');
+        const usersResponse = await fetch('https://crm.infororg.com/api/bda-users');
         if (!usersResponse.ok) throw new Error(`Failed to fetch users: ${usersResponse.status}`);
         const usersData = await usersResponse.json();
         setUsers(usersData);

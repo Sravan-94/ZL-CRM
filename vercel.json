@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/backend/:path*",
-      "destination": "http://147.93.102.131:8080/:path*"
+      "destination": "https://crm.infororg.com/:path*"
     },
     {
       "source": "/(.*)",

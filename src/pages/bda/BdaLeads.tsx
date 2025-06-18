@@ -68,7 +68,7 @@ const BdaLeads = () => {
       setIsLoading(true);
       try {
         // Fetch leads
-        const leadsResponse = await fetch('http://147.93.102.131:8080/api/leads/getall');
+        const leadsResponse = await fetch('https://crm.infororg.com/api/leads/getall');
         if (!leadsResponse.ok) throw new Error(`Failed to fetch leads: ${leadsResponse.status}`);
         const rawLeadsData = await leadsResponse.json();
 
@@ -574,7 +574,7 @@ const BdaLeads = () => {
                 return false;
               }
 
-              const leadsResponse = await fetch('http://147.93.102.131:8080/api/leads/getall');
+              const leadsResponse = await fetch('https://crm.infororg.com/api/leads/getall');
               if (!leadsResponse.ok) {
                 console.error('Failed to fetch leads:', leadsResponse.status);
                 toast.error('Failed to refresh leads');

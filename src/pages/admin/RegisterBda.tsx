@@ -18,7 +18,7 @@ const RegisterBDA: React.FC = () => {
     }
 
     try {
-      const res = await fetch('http://147.93.102.131:8080/api/register', {
+      const res = await fetch('https://crm.infororg.com/api/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

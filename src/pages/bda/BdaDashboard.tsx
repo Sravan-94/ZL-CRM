@@ -39,7 +39,7 @@ const BdaDashboard = () => {
   useEffect(() => {
     if (user) {
       console.log('Logged-in user:', { id: user.id, name: user.name }); // Debug user object
-      fetch('http://147.93.102.131:8080/api/leads/getall')
+      fetch('https://crm.infororg.com/api/leads/getall')
         .then((response) => {
           if (!response.ok) {
             throw new Error(`HTTP error! Status: ${response.status}`);

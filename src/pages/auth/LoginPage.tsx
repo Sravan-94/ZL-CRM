@@ -28,7 +28,7 @@ const LoginPage: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const res = await axios.post<{ data: User }>('/api/login', {
+      const res = await axios.post<{ data: User }>('https://crm.infororg.com/api/login', {
         email,
         password,
       });

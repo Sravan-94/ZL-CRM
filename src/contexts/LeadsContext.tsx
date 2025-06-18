@@ -84,7 +84,7 @@ export const LeadsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch('http://147.93.102.131:8080/api/leads/getall');
+      const response = await fetch('https://crm.infororg.com/api/leads/getall');
       if (!response.ok) {
         throw new Error(`HTTP error! Status: ${response.status}`);
       }
@@ -149,7 +149,7 @@ export const LeadsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         state: updatedData.state ?? ''
       };
 
-      const response = await fetch(`http://147.93.102.131:8080/api/leads/update/${parseInt(leadId, 10)}`, {
+      const response = await fetch(`https://crm.infororg.com/api/leads/update/${parseInt(leadId, 10)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(apiPayload),
