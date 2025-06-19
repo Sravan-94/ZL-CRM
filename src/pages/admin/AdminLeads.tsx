@@ -1129,7 +1129,7 @@ const AdminLeads = () => {
                 state: updatedLead.state ?? '',
                 lastUpdated: new Date().toISOString(),
               };
-              const response = await fetch(`http://crmbackend-lxbe.on.com/api/leads/update/${updatedLead.id}`, {
+              const response = await fetch(`https://crm.infororg.com/api/leads/update/${updatedLead.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
